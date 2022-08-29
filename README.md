@@ -1,0 +1,347 @@
+# Text Editor Query Language
+
+Idea for an SQL-inspired language to perform bulk edits to text files
+
+## Rational
+
+I find myself doing a great deal of refactoring. Often this is dull and boring, with repeated use of find-and-replace across multiple files. However, using find-and-replace has some difficulties:
+
+1. Sometimes is is necessary to find-and-replace two sections in the same file at the same time, ensuring both sections are matched and replaced in a single "transaction"
+2. Sometimes I want to change one line based on the content of another line elsewhere in the file (e.g. change this parameter in files which also contain this if statement)
+3. Composing regexes to match properly can sometimes be annoying (especially in regards to whitespace differences)
+4. Preserving indentation when inserting lines can be challenging and messy
+
+## Existing Solutions
+
+There are already some script-based file editing tools. 
+
+* `sed`: Frankly `sed` is difficult to learn, difficult to use, uses difficult to read scripts, is rather inflexible.
+* Perl: The progamming langague is designed around text processing, but it's frankly too powerful for the fairly simple tasks I want to do, I'd like something simpler where I can just throw together a quick query to do what I want and move on, rather than writing a program to do it.
+
+## Proposed Syntax
+
+SQL is a great langauge for making bulk change to a database. Why not use something similar to make bulk changes to text files? For example:
+
+```
+UPDATE */rep_current.php
+CHANGE "Auth::protectPageOrDie();" TO "Auth::protectPageOrDie(UserLevel::READ_ONLY);"
+WHERE ANY LINE = '<?php if ($_SESSION['level'] >= UserLevel::READ_ONLY) { ?>'
+```
+
+### Query Types
+
+I see value in the following types of queries to TEQL:
+
+* `SELECT...FROM`: A simple search feature
+* `UPDATE`: Actually perform updates to the file
+* `PREVIEW UPDATE`: The same as update, but write to stdout instead of overwriting the file
+* `CREATE...FROM`: Create a new file based on the specified file
+* `CREATE DIFF...FROM`: Create a diff file for the changes that would be applied
+
+### Search operations
+
+WIP Section
+
+Still working out how to work with getting data from file contents versus the file itself. This doesn't translate perfectly to a nice flat "table"
+
+Searching uses a `SELECT...FROM` syntax like SQL. Whatever is between `SELECT` and `FROM` indicates what data about the matched files or lines you would like returned.
+
+We could select the following types of data:
+
+* The name of all matched files
+* The actual matched lines
+* Number of matches found
+
+I envision something like this:
+
+```
+SELECT file_name
+FROM *.php
+WHERE FILE CONTAINS "search string"
+```
+
+
+### Editing operations
+
+These would be supported on all query types except `SELECT`.
+
+* `INSERT...[BEFORE|AFTER|AT]`
+* `CHANGE...TO`
+* `DELETE`
+* `DELETE...[BEFORE|AFTER|AT]`
+* `INDENT [amount]`
+
+#### INSERT
+
+Insert based on line number: (The second `LINE` keyword can be optional and is implied if omitted)
+
+```
+UPDATE somefile
+INSERT LINE "This line will be inserted" AT LINE 5
+```
+
+Negative numbers supported (to insert n lines from the end)
+
+```
+UPDATE somefile
+INSERT LINE "This line will be inserted" AT LINE -5
+```
+
+Insert a line at the beginning or end of the file (The `FILE` keyword is optional and implied if ommitted):
+
+```
+UPDATE somefile
+INSERT LINE "This line will be inserted" AT FILE END
+```
+
+Insert based on a matched line:
+
+```
+UPDATE somefile
+INSERT LINE "This new line will be inserted" BEFORE "This line already exists"
+```
+
+Combined form to insert relative to a matched line:
+
+```
+UPDATE somefile
+INSERT LINE "This new line will be inserted" AT 3 AFTER "This line already exists"
+```
+
+If the first `LINE` keyword is omitted, the behavior changes. Now it will insert values in place on the existing line:
+
+```
+UPDATE somefile
+INSERT "This will be added to the end of line 5" AT LINE 5 END
+```
+
+```
+UPDATE somefile
+INSERT " add this mid-line " BEFORE "existing part of line"
+```
+
+#### CHANGE...TO
+
+Make a change to matched text.
+
+Change a literal value anywhere in the file:
+
+```
+UPDATE somefile
+CHANGE "thisname" TO "othername"
+```
+
+Replace an entire line (not considering leading and trailing whitespace):
+
+```
+UPDATE somefile
+CHANGE LINE "return this;" TO "return something_else;"
+```
+
+#### DELETE
+
+Delete only the matched text:
+
+```
+UPDATE somefile
+DELETE "delete me"
+```
+
+Using a regex or `LIKE` operation to delete parts of a line:
+
+```
+UPDATE somefile
+DELETE LIKE "// TODO%"
+```
+
+Delete an entire line:
+
+```
+UPDATE somefile
+DELETE LINE "delete this line"
+```
+
+#### INDENT
+
+Change the indentation of a line or lines:
+
+Values are in "units of indentation" which, could be 1 tab, 4 spaces, 2 spaces; whaterver is configured in the tool, or possibly detected from the file. The value can be a positive delta, negative delta, or an absolute value.
+
+```
+UPDATE somefile
+INDENT -1 LINE 'Remove 1 unit of indentation from this line'
+INDENT +1 LINE 'Add 1 unit of indentation from this line'
+INDENT 0 LINE "Set this line's indentation to 0"
+```
+
+
+### More complex selection criteria
+
+Select only the first or last matching lines:
+
+```
+UPDATE somefile
+DELETE LAST LINE LIKE "return%"
+```
+
+index into the matched lines: (below deletes the 4th and 6th lines starting with 'return')
+
+```
+UPDATE somefile
+DELETE 4,6 LINE LIKE "return%"
+```
+
+Select a block based on start and end lines (both matched lines must have the same indentation):
+
+```
+UPDATE somefile
+DELETE FROM LINE "if (condition){" TO LINE "}"
+```
+
+Or a non-greedy version of the above:
+
+```
+UPDATE somefile
+DELETE FROM LINE "if (condition){" TO NEXT LINE "}"
+```
+
+And a version that does not require the same indentation:
+
+```
+UPDATE somefile
+DELETE FROM LINE "if (condition){" TO ANY NEXT LINE "}"
+```
+
+We can match en entire line based on only a portion of the line using `LINE WITH`. This differs from just omitting the `LINE` keyword altogether as if will still select the entire line, not just the matched text.
+
+```
+UPDATE somefile
+DELETE LINE WITH "return"
+```
+
+### WHERE clauses
+
+A WHERE clause can be applied both to the files, and to the individual operations performed thereon.
+
+Filter files to only those with matching criteria for all operations:
+
+```
+UPDATE *.php
+WHERE FILE CONTAINS LINE "search the file for this line"
+CHANGE "some value" TO "another value"
+```
+
+Conditionally perform the individual operation:
+
+```
+UPDATE *.php
+CHANGE "some value" TO "another value"
+WHERE LINE CONTAINS "search the line"
+```
+
+### Matching Files
+
+Where the file is specifed in the query, a file glob pattern is accepted by default, or a list of files. It may optionally be surrounded by quotes if needed.
+
+```
+UPDATE /path/to/file/*.html
+...
+```
+
+```
+UPDATE file1.py file2.py file3.py
+...
+```
+
+```
+UPDATE "/this/path has/whitespace.txt"
+...
+```
+
+```
+UPDATE "/also/allow/{bash|shell}/expansion.txt"
+...
+```
+
+If desired, you can instead use regex or a `LIKE` operator (The `FILES` keyword here is optional):
+
+```
+UPDATE FILES REGEXP "[_a-z]+\.php"
+...
+```
+
+```
+UPDATE FILES LIKE "%.html"
+...
+```
+
+
+### Matching Lines
+
+Match a literal string somewhere in the line:
+
+```
+UPDATE somefile
+INSERT LINE "some line" BEFORE "some part of the line"
+```
+
+Matching the entire line (not considering leading or trailing whitespace):
+
+```
+UPDATE somefile
+INSERT LINE "some line" BEFORE LINE "Match this entire line"
+```
+
+Matching the entire line (including leading and trailing whitepace):
+
+```
+UPDATE somefile
+INSERT LINE "some line" BEFORE FULL LINE "    Match this entire line"
+```
+
+You can also use regex or the `LIKE` operator:
+
+```
+UPDATE somefile
+INSERT LINE "some line" BEFORE LINE REGEXP '^[a-zA-Z0-9_]+\s*=\s*.*;$'
+```
+
+```
+UPDATE somefile
+INSERT LINE "some line" BEFORE LINE LIKE '%=%'
+```
+
+We can also match multiple lines (Any indentation here will be relative to the first non-empty line's indentation):
+```
+UPDATE somefile
+INSERT LINE "some line" BEFORE LINES """
+first line
+second line
+"""
+```
+
+### Aliases
+
+We can find and alias matches for use in multiple operations:
+
+```
+UPDATE somefile
+USE LINES """
+result = doThing();
+doOtherThing(result);
+""" AS the_block
+INSERT LINE "if (condition){" BEFORE the_block
+INSERT LINE "}" AFTER the_block
+INDENT +1 the_block
+```
+
+### String interpolation
+
+Like in bash or PHP, double-quoted strings will be interpolated. The `$` will indicate a value to be replaced. This can be used to get matched values from the line, regex capture groups, or special values like the file name.
+
+```
+UPDATE somefile
+CHANGE LINE REGEXP '^old_prefix_([a-zA-Z0-9_]+)\s*=\s*(.*);$' TO "new_prefix_$1 = $2"
+```
+
+The more complex format `${}` will allow performaing operations on the interpolated value, e.g. `${filename | replace_pattern '\.[a-zA-Z0-9]+%' '' | replace '_' ' ' | capitalize}`
