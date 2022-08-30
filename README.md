@@ -60,6 +60,14 @@ FROM *.php
 WHERE FILE CONTAINS "search string"
 ```
 
+The idea would be to allow asking questions like this about a codebase:
+
+* Is this code duplicated elsewhere in the project?
+* Which files contain this search key but not this other one?
+* How many times does this key appear in each file?
+* How many lines of code are in the project?
+* Where is this deprecated functionality used?
+* Where is this or that bad programming practice used? (e.g. search for syntax patterns you want to get rid of)
 
 ### Editing operations
 
