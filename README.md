@@ -220,12 +220,23 @@ UPDATE somefile
 DELETE FROM LINE "if (condition){" TO ANY NEXT LINE "}"
 ```
 
+Also a block selection that matches the contents, but not the start and end match themselves:
+
+```
+UPDATE somefile
+DELETE BETWEEN LINE "if (condition){" TO LINE "}"
+```
+
 We can match en entire line based on only a portion of the line using `LINE WITH`. This differs from just omitting the `LINE` keyword altogether as if will still select the entire line, not just the matched text.
 
 ```
 UPDATE somefile
 DELETE LINE WITH "return"
 ```
+
+Other matching criteria to support (Not sure on syntax yet...)
+* Match a line if and only if it is followed/preceded by a different match
+* Match a contiguous block of matches as a single matched section (e.g. find a block of lines that each individually match a pattern)
 
 ### WHERE clauses
 
