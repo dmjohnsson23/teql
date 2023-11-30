@@ -173,13 +173,56 @@ DELETE LINE "delete this line"
 
 Change the indentation of a line or lines:
 
-Values are in "units of indentation" which, could be 1 tab, 4 spaces, 2 spaces; whaterver is configured in the tool, or possibly detected from the file. The value can be a positive delta, negative delta, or an absolute value.
+Values are in "units of indentation" which, could be 1 tab, 4 spaces, 2 spaces; whatever is configured in the tool, or possibly detected from the file. The value can be a positive delta, negative delta, or an absolute value.
 
 ```
 UPDATE somefile
 INDENT -1 LINE 'Remove 1 unit of indentation from this line'
 INDENT +1 LINE 'Add 1 unit of indentation from this line'
 INDENT 0 LINE "Set this line's indentation to 0"
+```
+
+#### Chained editing operations
+
+Operations in a single query will all be performed against the same base version of the file, rather than as subsequent operations.
+
+For example, in this example file:
+
+```
+thisname
+othername
+```
+
+With this code:
+
+```
+UPDATE somefile
+CHANGE "thisname" TO "othername"
+CHANGE "othername" TO "newname";
+```
+
+The resulting file would be:
+
+```
+othername
+newname
+```
+
+However, this code:
+
+```
+UPDATE somefile
+CHANGE "thisname" TO "othername";
+
+UPDATE somefile
+CHANGE "othername" TO "newname";
+```
+
+Would result in:
+
+```
+newname
+newname
 ```
 
 
