@@ -407,3 +407,7 @@ CHANGE LINE REGEXP '^old_prefix_([a-zA-Z0-9_]+)\s*=\s*(.*);$' TO "new_prefix_$1 
 ```
 
 The more complex format `${}` will allow performaing operations on the interpolated value, e.g. `${filename | replace_pattern '\.[a-zA-Z0-9]+%' '' | replace '_' ' ' | capitalize}`
+
+## TODOs
+
+* Performance: Ideally I think we can accomplish this in a single pass for SELECT operations, and two passes for UPDATE operations (one to decide what to do, and one to do it), but right now I'm just focused on making things actually *function*.

@@ -1,0 +1,113 @@
+start: query [";" query]*
+?query: select_query | update_query | set_query
+
+//========== SELECT queries ==========//
+select_query: "SELECT"i select_values "FROM"i path ["WHERE"i selection_operation+]
+select_values: select_value ["," select_value]
+select_value: (variable | selection | symbol | LITERAL_STRING) ["AS"i symbol]
+selection_operation: "TODO"
+
+//========== UPDATE queries ==========//
+update_query: "UPDATE"i path update_operation+
+?update_operation: insert_operation | change_operation | delete_operation | indent_operation
+insert_operation: "INSERT"i KW_LINE? string_expression "AT"i? cursor
+change_operation: ("CHANGE"i (selection | string_expression) "TO"i string_expression) | ("REPLACE"i (selection | string_expression) "WITH"i string_expression)
+delete_operation: "DELETE"i selection
+indent_operation: "INDENT"i LITERAL_INT? cursor_or_selection
+
+//========== UPDATE queries ==========//
+set_query: "SET"i (variable | symbol) "="? (symbol | string_expression)
+
+
+//========== Cursors and selections ==========//
+?cursor_or_selection: cursor | selection
+?cursor: start_cursor | end_cursor | selection_after_cursor | selection_before_cursor | selection_cursor | range_index_cursor | parenthetical_cursor
+?selection: selection_after_selection | selection_before_selection | direct_line_selection | cursor_line_selection | selection_line_selection | find_selection | block_selection | sub_selection | range_index_selection | parenthetical_selection
+?string_match_expression: LITERAL_STRING | LITERAL_REGEX | variable | ( "(" selection ")" )
+?parenthetical_cursor: "(" cursor ")"
+?parenthetical_selection: "(" selection ")"
+
+// place cursor at the start of the current context
+start_cursor: "START"i
+// place cursor at the end of the current context
+end_cursor: "END"i
+// place cursor at the after a selection or cursor
+selection_after_cursor: LITERAL_INT? "AFTER"i cursor_or_selection
+// place cursor before a selection or cursor
+selection_before_cursor: LITERAL_INT? "BEFORE"i cursor_or_selection
+// place a cursor in the context of a selection
+selection_cursor: cursor "IN"i selection
+// if a cursor has multiple matches, select the nth one(s)
+range_index_cursor: range_index_list "OF"i? cursor
+
+// select everything in context from the end of the other cursor or selection
+selection_after_selection: "EVERYTHING"i "AFTER"i cursor_or_selection
+// select everything in context until the start of the other cursor or selection
+selection_before_selection: "EVERYTHING"i "BEFORE"i cursor_or_selection
+// select a specific line by line number; negative to select from end
+direct_line_selection: ("LINE"i | "LINES"i) range_index_list
+// select a line by that a cursor sites on
+cursor_line_selection: ("LINE"i | "LINES"i) cursor
+// select individual lines of a larger selection
+selection_line_selection: ("LINE"i | "LINES"i) "IN"i selection
+// find a selection
+find_selection: "FIND"i KW_NEXT? KW_MATCHING? [KW_LINE KW_WITH?] string_match_expression
+// select a large block from two other selections
+block_selection: "FROM"i cursor_or_selection "TO"i cursor_or_selection
+// select a large block between two other selections
+between_selection: "BETWEEN"i cursor_or_selection "AND"i cursor_or_selection
+// select a portion of a previous selection
+sub_selection: selection "IN"i selection
+// if a selection has multiple matches, select the nth one
+range_index_selection: range_index_list "OF"i? selection
+
+//========== Ranges/indexes ==========//
+range_index_list: range_index ["," range_index]*
+?range_index: range_index_first | range_index_last | range_index_next | range_index_index | range_index_range
+range_index_first: "FIRST"i LITERAL_INT?
+range_index_last: "LAST"i LITERAL_INT?
+range_index_next: "NEXT"i LITERAL_INT?
+range_index_index: LITERAL_INT
+range_index_range: LITERAL_INT ":" LITERAL_INT [":" LITERAL_INT]
+
+//========== modifier keywords ==========//
+KW_NEXT: "NEXT"i
+KW_LINE: "LINE"i | "LINES"i
+KW_WITH: "WITH"i
+KW_MATCHING: "WITH"i
+
+//========== Foundation ==========//
+variable: "$" (NAMED_IDENTIFIER | POSITIONAL_IDENTIFIER) ("." (NAMED_IDENTIFIER | POSITIONAL_IDENTIFIER))*
+?path: LITERAL_STRING | LITERAL_PATH
+?string_expression: LITERAL_STRING | variable
+symbol: NAMED_IDENTIFIER
+
+NAMED_IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+POSITIONAL_IDENTIFIER: /[0-9]+/
+
+_REGEX_INNER: /.*?/
+_REGEX_ESC_INNER: _REGEX_INNER /(?<!\\)(\\\\)*?/
+LITERAL_REGEX : "/" _REGEX_ESC_INNER "/"
+
+_STRING_INNER: /.*?/
+_STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/
+_DQ_STRING : "\"" _STRING_ESC_INNER "\""
+_SQ_STRING : "'" _STRING_ESC_INNER "'"
+LITERAL_STRING: _DQ_STRING | _SQ_STRING
+
+_PATH_START: "/" | "./" | "~/"
+_PATH_COMPONENT: /[^\/\\\s]+/
+_PATH_SEP: "/" | "\\"
+LITERAL_PATH: _PATH_START? _PATH_COMPONENT [_PATH_SEP _PATH_COMPONENT] _PATH_SEP?
+
+%import common.SIGNED_INT -> LITERAL_INT
+%import common.WS
+%ignore WS
+%import common.SH_COMMENT
+%ignore SH_COMMENT
+%import common.CPP_COMMENT
+%ignore CPP_COMMENT
+%import common.C_COMMENT
+%ignore C_COMMENT
+%import common.SQL_COMMENT
+%ignore SQL_COMMENT
