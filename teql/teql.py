@@ -1,14 +1,18 @@
 import sys, os
 from glob import glob
 from io import TextIOBase
-import dataclass
+from dataclasses import dataclass
 from enum import Enum
 from .parser import parse
 from . import ast
+from .context import Context
+from .range import apply_ranges, first, last
+from typing import List
 
 class TEQL:
-    def __init__(self, *, encoding=None):
+    def __init__(self, *, encoding=None, line_separator=None):
         self.encoding = encoding or sys.getdefaultencoding()
+        self.line_separator = line_separator or os.linesep
         self.session_variables = VariableStore()
     
     def execute(self, code:str):
@@ -36,21 +40,43 @@ class TEQL:
                 yield self._executeSelectQuery(query)
             elif isinstance(query, ast.SetQuery):
                 yield self._executeSetQuery(query)
+
+    def _executeSelectQuery(self, query:ast.SelectQuery):
+        for path in glob(query.path):
+            store = VariableStore()
+            index = 0 # TODO do we want to index from 1 to match SQL? (Index 0 could be "special" like in regex)
+            with open(path, 'r+b') as file:
+                context = Context(file, encoding=self.encoding, line_separator=self.line_separator)
+                for value in query.values:
+                    evaluated = self._evaluateSelectValue(value)
+                    store[index] = evaluated
+                    if value.alias is not None:
+                        store[value.alias.name] = evaluated
+    
+    def _evaluateSelectValue(self, value, context: Context):
+        if isinstance(value, ast._Selection):
+            return VariableStore([
+                context.string(selection.i1, selection.i2) 
+                    for selection in self._evaluateSelection(value, context)
+            ])
+        # TODO other types
+
     
     def _executeUpdateQuery(self, query:ast.UpdateQuery):
         for path in glob(query.path):
             opcodes = []
-            with open(path, 'r+') as file:
+            with open(path, 'r+b') as file:
+                context = Context(file, encoding=self.encoding, line_separator=self.line_separator)
                 for operation in query.operations:
-                    opcodes.append(self._getUpdateOperationOpcodes(operation, file))
-                self._doUpdateOperationOpcodes(opcodes, file)
+                    opcodes.append(self._getUpdateOperationOpcodes(operation, context))
+                self._doUpdateOperationOpcodes(opcodes, context)
     
-    def _getUpdateOperationOpcodes(self, operation, file):
+    def _getUpdateOperationOpcodes(self, operation, context:Context):
         """
         Generate a series of opcodes for the operations to apply to the file
         """
         if isinstance(operation, ast.InsertOperation):
-            for sel in self._evaluateSelection(operation.cursor):
+            for sel in self._evaluateSelection(operation.cursor, context):
                 # TODO add newlines if operation.is_line = True
                 yield Opcode.insert(sel.i1, sel.i2, self._evaluateReplacement(sel, operation.string))
         elif isinstance(operation, ast.ChangeOperation):
@@ -58,22 +84,23 @@ class TEQL:
                 selection = ast.FindSelection(selection)
             else:
                 selection = operation.selection
-            for sel in self._evaluateSelection(selection):
+            for sel in self._evaluateSelection(selection, context):
                 yield Opcode.replace(sel.i1, sel.i2, self._evaluateReplacement(sel, operation.replacement))
         if isinstance(operation, ast.DeleteOperation):
-            for sel in self._evaluateSelection(operation.selection):
+            for sel in self._evaluateSelection(operation.selection, context):
                 yield Opcode.delete(sel.i1, sel.i2)
         if isinstance(operation, ast.IndentOperation):
             # TODO
+            pass
     
-    def _evaluateSelection(self, selector:ast._CursorOrSelection, context):
+    def _evaluateSelection(self, selector:ast._CursorOrSelection, context:Context):
         """
-        Given a cursor or selector statement, yeild a series of real selections with start and end indices.
+        Given a cursor or selector statement, yield a series of real selections with start and end indices.
         """
         if isinstance(selector, ast.StartCursor):
             yield Selection(0,0)
         elif isinstance(selector, ast.EndCursor):
-            i = len(context) - 1 # TODO is context a string or a file?
+            i = len(context) - 1
             yield Selection(i,i)
         elif isinstance(selector, ast.SelectionAfterCursor):
             for other in self._evaluateSelection(selector.other, context):
@@ -85,59 +112,58 @@ class TEQL:
                 yield Selection(i,i)
         elif isinstance(selector, ast.SelectionCursor):
             for other in self._evaluateSelection(selector.outer, context):
-                yield from self._evaluateSelection(selector.inner, get_context_of(other)) # TODO get_context_of is a placeholder
+                yield from self._evaluateSelection(selector.inner, context.sub(other.s1, other.s2))
         elif isinstance(selector, ast.RangeIndexCursor): 
             # if a cursor has multiple matches, select the nth one(s)
-            other = self._evaluateSelection(selector.other, context):
-            yield from apply_ranges(selector.ranges, other) # TODO apply_ranges is a placeholder
-        if isinstance(selector, ast.SelectionAfterSelection):
+            other = self._evaluateSelection(selector.other, context)
+            yield from apply_ranges(selector.ranges, other)
+        elif isinstance(selector, ast.SelectionAfterSelection):
             # select everything in context from the end of the other cursor or selection
             other = last(self._evaluateSelection(selector.other, context)) # TODO last is a placeholder
             i = len(context) - 1 # TODO is context a string or a file?
             yield Selection(other.i2, i) # TODO may need to add 1 to other.i2
-        if isinstance(selector, ast.SelectionBeforeSelection):
+        elif isinstance(selector, ast.SelectionBeforeSelection):
             # select everything in context until the start of the other cursor or selection
-            other = last(self._evaluateSelection(selector.other, context)) # TODO last is a placeholder
+            other = first(self._evaluateSelection(selector.other, context)) # TODO first is a placeholder
             yield Selection(0, other.i1) # TODO may need to substract 1 to other.i1
-        if isinstance(selector, ast.DirectLineSelection):
+        elif isinstance(selector, ast.DirectLineSelection):
             # select a specific line by line number; negative to select from end
-            yield from apply_ranges(selector.ranges, select_lines_of(context)) # TODO apply_ranges and select_lines_of are placeholders
-        if isinstance(selector, ast.CursorLineSelection):
+            yield from apply_ranges(selector.ranges, context.expand_to_lines().split_lines())
+        elif isinstance(selector, ast.CursorLineSelection):
             # select a line by that a cursor sits on
-            # TODO line from selector.other
-        if isinstance(selector, ast.SelectionLineSelection):
+            pass # TODO line from selector.other
+        elif isinstance(selector, ast.SelectionLineSelection):
             # select individual lines of a larger selection
             for other in self._evaluateSelection(selector.outer, context):
-                yield from select_lines_of(get_context_of(other)) # TODO select_lines_of and get_context_of are placeholders
-        if isinstance(selector, ast.FindSelection):
+                yield from context.sub(other.s1, other.s2).expand_to_lines().split_lines()
+        elif isinstance(selector, ast.FindSelection):
             # find a selection
             # expression: _StringMatchExpression
             # is_next # relative to previous selection
             # is_matching:bool # same indentation as previous selection
             # is_line:bool # select entire line
             # is_with:bool # match only part of a line even if selecting entire line
-            # TODO
-
-        if isinstance(selector, ast.BlockSelection):
+            pass # TODO
+        elif isinstance(selector, ast.BlockSelection):
             # select a large block from two other selections
-            # start: _CursorOrSelection
-            # end: _CursorOrSelection
-            # TODO
-        if isinstance(selector, ast.BetweenSelection):
+            start = first(self._evaluateSelection(selector.start, context))
+            end: last(self._evaluateSelection(selector.start, context.sub(start.end, context.end)))
+            yield context.sub(start.start, end.end)
+        elif isinstance(selector, ast.BetweenSelection):
             # select a large block between two other selections
-            # start: _CursorOrSelection
-            # end: _CursorOrSelection
-            # TODO
-        if isinstance(selector, ast.SubSelection):
+            start = first(self._evaluateSelection(selector.start, context))
+            end: last(self._evaluateSelection(selector.start, context.sub(start.end, context.end)))
+            yield context.sub(start.end, end.start)
+        elif isinstance(selector, ast.SubSelection):
             # select a portion of a previous selection
             # inner: _Selection
             # outer: _Selection
-            # TODO
-        if isinstance(selector, ast.RangeIndexSelection):
+            pass # TODO
+        elif isinstance(selector, ast.RangeIndexSelection):
             # if a selection has multiple matches, select the nth one
             # ranges: List[_RangeIndex]
             # other: _Selection
-            # TODO
+            pass # TODO
 
     def _evaluateReplacement(self, selection, replacement):
         """
@@ -152,13 +178,16 @@ class TEQL:
         for opcode in self._normalizeOpcodeList(opcodes):
             pass # todo
     
-    def _normalizeOpcodeList(self, opcodes):
+    def _normalizeOpcodeList(self, opcodes:List['Operation']):
         """
-        Sort a series of opcodes and ensure that none of them overlap
+        Sort a series of opcodes by reverse index, and ensure that none of them overlap
         """
-
-    def _executeSelectQuery(self, query:ast.SelectQuery):
-        pass
+        prev = None
+        for opcode in sorted(opcodes, key=lambda op: op.i1, reverse=True):
+            if prev is not None and opcode.i2 > prev.i1:
+                raise Exception(f'Conflicting/overlapping operations: {opcode} and {prev}')
+            prev = opcode
+            yield opcode
 
     def _executeSetQuery(self, query:ast.SetQuery):
         if isinstance(query.value, ast.Variable):
@@ -171,6 +200,19 @@ class TEQL:
                     self.encoding = str(value.name)
                 elif isinstance(value, str):
                     self.encoding = value
+                else:
+                    raise ValueError(f"{value} is not valid for encoding")
+            if query.key.name == 'linesep':
+                if isinstance(value, str):
+                    self.encoding = value
+                elif isinstance(value, ast.Symbol) and value.name.lower() in ('posix','unix','lf'):
+                    self.line_separator = "\n"
+                if isinstance(value, ast.Symbol) and value.name.lower() in ('windows','dos','crlf'):
+                    self.line_separator = "\r\n"
+                if isinstance(value, ast.Symbol) and value.name.lower() == 'cr':
+                    self.line_separator = "\r"
+                if isinstance(value, ast.Symbol) and value.name.lower() == 'lfcr':
+                    self.line_separator = "\n\r"
                 else:
                     raise ValueError(f"{value} is not valid for encoding")
         elif isinstance(query.key, ast.Variable):
@@ -189,7 +231,6 @@ class Opcode(str,Enum):
 class Selection:
     i1:int
     i2:int
-    value:str=None
 
 @dataclass
 class Operation:
@@ -200,9 +241,14 @@ class Operation:
 
             
 class VariableStore:
-    def __init__(self):
+    def __init__(self, *args):
         self._positional = []
         self._named = {}
+        for arg in args:
+            if isinstance(arg, list):
+                self._positional.extend(arg)
+            if isinstance(arg, dict):
+                self._named.update(arg)
 
     def __getitem__(self, index):
         if isinstance(index, int):

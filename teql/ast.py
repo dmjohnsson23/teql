@@ -17,6 +17,10 @@ class Symbol(_Node):
     name: str
 
 @dataclass
+class LiteralPath(_Node):
+    path: str
+
+@dataclass
 class _RangeIndex(_Node):
     pass
 
@@ -219,10 +223,6 @@ class IndentOperation(_UpdateOperation):
             self.selection = args[0]
 
 @dataclass
-class _SelectOperation(_Node):
-    pass
-
-@dataclass
 class SelectValue(_Node):
     value:Union[_Selection,Variable,Symbol,str]
     alias:Symbol=None
@@ -231,10 +231,9 @@ class SelectValue(_Node):
 class SelectQuery(_Node):
     values:List[SelectValue]
     path:str
-    operations:List[_UpdateOperation]
-    def __init__(self, path, *operations):
+    def __init__(self, values, path):
+        self.values = values
         self.path = path
-        self.operations = operations
 
 @dataclass
 class SetQuery(_Node):
@@ -246,6 +245,8 @@ class SetQuery(_Node):
 
 class ToAst(Transformer):
     # Define extra transformation functions, for rules that don't correspond to an AST class.
+    select_values = list
+    range_index_list = list
 
     def NAMED_IDENTIFIER(self, ident):
         return ident
@@ -258,6 +259,7 @@ class ToAst(Transformer):
         return s[1:-1]
 
     def LITERAL_REGEX(self, s):
+        # TODO handle flags
         return re.compile(s[1:-1])
 
     def LITERAL_INT(self, n):

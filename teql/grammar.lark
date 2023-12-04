@@ -1,11 +1,10 @@
-start: query [";" query]*
+start: query (";" query?)*
 ?query: select_query | update_query | set_query
 
 //========== SELECT queries ==========//
-select_query: "SELECT"i select_values "FROM"i path ["WHERE"i selection_operation+]
-select_values: select_value ["," select_value]
+select_query: "SELECT"i select_values "FROM"i path
+select_values: select_value ("," select_value)*
 select_value: (variable | selection | symbol | LITERAL_STRING) ["AS"i symbol]
-selection_operation: "TODO"
 
 //========== UPDATE queries ==========//
 update_query: "UPDATE"i path update_operation+
@@ -62,7 +61,7 @@ sub_selection: selection "IN"i selection
 range_index_selection: range_index_list "OF"i? selection
 
 //========== Ranges/indexes ==========//
-range_index_list: range_index ["," range_index]*
+range_index_list: range_index ("," range_index)*
 ?range_index: range_index_first | range_index_last | range_index_next | range_index_index | range_index_range
 range_index_first: "FIRST"i LITERAL_INT?
 range_index_last: "LAST"i LITERAL_INT?
@@ -87,7 +86,7 @@ POSITIONAL_IDENTIFIER: /[0-9]+/
 
 _REGEX_INNER: /.*?/
 _REGEX_ESC_INNER: _REGEX_INNER /(?<!\\)(\\\\)*?/
-LITERAL_REGEX : "/" _REGEX_ESC_INNER "/"
+LITERAL_REGEX : "/" _REGEX_ESC_INNER "/" /[iLmsux]*/
 
 _STRING_INNER: /.*?/
 _STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/

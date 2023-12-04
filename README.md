@@ -37,6 +37,7 @@ I see value in the following types of queries to TEQL:
 * `PREVIEW UPDATE`: The same as update, but write to stdout instead of overwriting the file
 * `CREATE...FROM`: Create a new file based on the specified file
 * `CREATE DIFF...FROM`: Create a diff file for the changes that would be applied
+* `SET` Set a global variable or session setting
 
 ### Search operations
 
@@ -397,6 +398,13 @@ INSERT LINE "}" AFTER the_block
 INDENT +1 the_block
 ```
 
+### Session Settings
+
+The following session settings can be configured using a `SET` query:
+
+* encoding: The encoding to use when reading and writing files. Defaults to the system's default encoding. (This is *not* the encoding of the TEQL script itself)
+* linesep: The line separator to use when reading and writing files. Defaults to the system's default line separator.
+
 ### String interpolation
 
 Like in bash or PHP, double-quoted strings will be interpolated. The `$` will indicate a value to be replaced. This can be used to get matched values from the line, regex capture groups, or special values like the file name.
@@ -406,8 +414,9 @@ UPDATE somefile
 CHANGE LINE REGEXP '^old_prefix_([a-zA-Z0-9_]+)\s*=\s*(.*);$' TO "new_prefix_$1 = $2"
 ```
 
-The more complex format `${}` will allow performaing operations on the interpolated value, e.g. `${filename | replace_pattern '\.[a-zA-Z0-9]+%' '' | replace '_' ' ' | capitalize}`
+The more complex format `${}` will allow performing operations on the interpolated value, e.g. `${filename | replace_pattern '\.[a-zA-Z0-9]+%' '' | replace '_' ' ' | capitalize}`
 
 ## TODOs
 
-* Performance: Ideally I think we can accomplish this in a single pass for SELECT operations, and two passes for UPDATE operations (one to decide what to do, and one to do it), but right now I'm just focused on making things actually *function*.
+* Ideally I think we can accomplish this in a single pass for SELECT operations, and two passes for UPDATE operations (one to decide what to do, and one to do it), but right now I'm just focused on making things actually *function*.
+* Python may not be the best language choice, since the goal is to have an efficient way of doing complex batch updates to multiple files (and potentially include it in IDEs!). Right now I'm mostly just prototyping in a "comfortable" language. Might be a good opportunity for me to get proficient with Rust when I rewrite; seems like that would be a better language choice.
