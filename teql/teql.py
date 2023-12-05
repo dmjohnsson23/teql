@@ -7,7 +7,7 @@ from .parser import parse
 from . import ast
 from .context import Context
 from .range import apply_ranges, first, last
-from typing import List
+from typing import List, Iterable, Optional
 
 class TEQL:
     def __init__(self, *, encoding=None, line_separator=None):
@@ -42,7 +42,12 @@ class TEQL:
                 yield self._executeSetQuery(query)
 
     def _executeSelectQuery(self, query:ast.SelectQuery):
+        return SelectResult(self._executeSelectQueryGetStores(query))
+    
+    def _executeSelectQueryGetStores(self, query:ast.SelectQuery):
+        path_found = False
         for path in glob(query.path):
+            path_found = True
             store = VariableStore()
             store[0] = path
             index = 1
@@ -55,6 +60,8 @@ class TEQL:
                         store[value.alias.name] = evaluated
                     index += 1
             yield store
+        if not path_found:
+            raise Exception(f"File(s) not found: {query.path}")
     
     def _evaluateSelectValue(self, value:ast.SelectValue, context: Context):
         if isinstance(value.value, ast._Selection):
@@ -280,3 +287,28 @@ class VariableStore:
     
     def __repr__(self):
         return f"VariableStore({repr(self._positional)}, {repr(self._named)})"
+
+
+class Result:
+    pass
+
+class SelectResult(Result):
+    def __init__(self, stores:Iterable[VariableStore]):
+        self._stores = iter(stores)
+    
+    def fetch(self)->Optional[VariableStore]:
+        try:
+            return next(self._stores)
+        except StopIteration:
+            return None
+    
+    def fetch_all(self)->List[VariableStore]:
+        return list(self._stores)
+    
+    def fetch_iter(self)->Iterable[VariableStore]:
+        yield from self._stores
+        
+class UpdateResult(Result):
+    pass
+class SetResult(Result):
+    pass

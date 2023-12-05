@@ -424,3 +424,4 @@ Arrays are 1-indexed like in SQL, and as is usually expected with numbering the 
 
 * Ideally I think we can accomplish this in a single pass for SELECT operations, and two passes for UPDATE operations (one to decide what to do, and one to do it), but right now I'm just focused on making things actually *function*.
 * Python may not be the best language choice, since the goal is to have an efficient way of doing complex batch updates to multiple files (and potentially include it in IDEs!). Right now I'm mostly just prototyping in a "comfortable" language. Might be a good opportunity for me to get proficient with Rust when I rewrite; seems like that would be a better language choice.
+* Because of how parsing is handled, LITERAL_PATH must be followed by a space before you can use a semicolon to end the query. This is annoying and confusing.

@@ -3,7 +3,6 @@ import io
 from mmap import mmap
 import sys, os
 
-
 class Context:
     data: mmap
     start: int
@@ -142,6 +141,7 @@ class Context:
         """
         Expand the selection to include only full lines (no partial lines).
         """
+        # TODO it may be good to keep an array of line start indices, and use the standard bisect module to search it, enabling fast line number lookups
         len_eol = len(self.line_separator)
         size = self.data.tell()
         if self.start == 0:

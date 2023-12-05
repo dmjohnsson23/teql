@@ -7,32 +7,12 @@ ap.add_argument('script', help='The TEQL script to execute', nargs='?')
 def main():
     args = ap.parse_args()
     if args.script is None:
-        interactive_shell()
+        from .interactive_shell import InteractiveShell
+        InteractiveShell().run()
     elif args.script == '-':
         run_script(sys.stdin)
     else:
         run_script(args.script)
-
-
-def interactive_shell():
-    teql = TEQL()
-    buff = []
-    is_continued = False
-    while True:
-        line = input('      ' if is_continued else 'teql> ')
-        buff.append(line)
-        is_continued = True
-        if line.strip().endswith(';') or line.strip() == '': # TODO make this smarter
-            # consider this the end of the query
-            query = '\n'.join(buff)
-            buff = []
-            is_continued = False
-            try:
-                result = teql.execute(query)
-                print(result)
-            except Exception as e:
-                print(e)
-                continue
             
 
 def run_script(script):
