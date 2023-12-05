@@ -44,20 +44,22 @@ class TEQL:
     def _executeSelectQuery(self, query:ast.SelectQuery):
         for path in glob(query.path):
             store = VariableStore()
-            index = 0 # TODO do we want to index from 1 to match SQL? (Index 0 could be "special" like in regex)
+            store[0] = path
+            index = 1
             with open(path, 'r+b') as file:
                 context = Context(file, encoding=self.encoding, line_separator=self.line_separator)
                 for value in query.values:
-                    evaluated = self._evaluateSelectValue(value)
+                    evaluated = self._evaluateSelectValue(value, context)
                     store[index] = evaluated
                     if value.alias is not None:
                         store[value.alias.name] = evaluated
+                    index += 1
+            yield store
     
-    def _evaluateSelectValue(self, value, context: Context):
-        if isinstance(value, ast._Selection):
+    def _evaluateSelectValue(self, value:ast.SelectValue, context: Context):
+        if isinstance(value.value, ast._Selection):
             return VariableStore([
-                context.string(selection.i1, selection.i2) 
-                    for selection in self._evaluateSelection(value, context)
+                selection.string() for selection in self._evaluateSelection(value.value, context)
             ])
         # TODO other types
 
@@ -78,17 +80,17 @@ class TEQL:
         if isinstance(operation, ast.InsertOperation):
             for sel in self._evaluateSelection(operation.cursor, context):
                 # TODO add newlines if operation.is_line = True
-                yield Opcode.insert(sel.i1, sel.i2, self._evaluateReplacement(sel, operation.string))
+                yield Opcode.insert(sel.start, sel.end, self._evaluateReplacement(sel, operation.string))
         elif isinstance(operation, ast.ChangeOperation):
             if not isinstance(operation.selection, ast._Selection):
                 selection = ast.FindSelection(selection)
             else:
                 selection = operation.selection
             for sel in self._evaluateSelection(selection, context):
-                yield Opcode.replace(sel.i1, sel.i2, self._evaluateReplacement(sel, operation.replacement))
+                yield Opcode.replace(sel.start, sel.end, self._evaluateReplacement(sel, operation.replacement))
         if isinstance(operation, ast.DeleteOperation):
             for sel in self._evaluateSelection(operation.selection, context):
-                yield Opcode.delete(sel.i1, sel.i2)
+                yield Opcode.delete(sel.start, sel.end)
         if isinstance(operation, ast.IndentOperation):
             # TODO
             pass
@@ -98,37 +100,37 @@ class TEQL:
         Given a cursor or selector statement, yield a series of real selections with start and end indices.
         """
         if isinstance(selector, ast.StartCursor):
-            yield Selection(0,0)
+            yield context.sub(0,0)
         elif isinstance(selector, ast.EndCursor):
             i = len(context) - 1
-            yield Selection(i,i)
+            yield context.sub(i,i)
         elif isinstance(selector, ast.SelectionAfterCursor):
             for other in self._evaluateSelection(selector.other, context):
-                i = other.i2 + (selector.n or 1) # TODO maybe should be 0
-                yield Selection(i,i)
+                i = other.end + (selector.n or 1) # TODO maybe should be 0
+                yield context.sub(i,i)
         elif isinstance(selector, ast.SelectionBeforeCursor):
             for other in self._evaluateSelection(selector.other, context):
-                i = other.i1 - (selector.n or 1) # TODO maybe should be 0
-                yield Selection(i,i)
+                i = other.start - (selector.n or 1) # TODO maybe should be 0
+                yield context.sub(i,i)
         elif isinstance(selector, ast.SelectionCursor):
             for other in self._evaluateSelection(selector.outer, context):
                 yield from self._evaluateSelection(selector.inner, context.sub(other.s1, other.s2))
         elif isinstance(selector, ast.RangeIndexCursor): 
             # if a cursor has multiple matches, select the nth one(s)
             other = self._evaluateSelection(selector.other, context)
-            yield from apply_ranges(selector.ranges, other)
+            yield from apply_ranges(selector.ranges, other, adapt_index=True)
         elif isinstance(selector, ast.SelectionAfterSelection):
             # select everything in context from the end of the other cursor or selection
-            other = last(self._evaluateSelection(selector.other, context)) # TODO last is a placeholder
+            other = last(self._evaluateSelection(selector.other, context))
             i = len(context) - 1 # TODO is context a string or a file?
-            yield Selection(other.i2, i) # TODO may need to add 1 to other.i2
+            yield context.sub(other.end, i) # TODO may need to add 1 to other.end
         elif isinstance(selector, ast.SelectionBeforeSelection):
             # select everything in context until the start of the other cursor or selection
-            other = first(self._evaluateSelection(selector.other, context)) # TODO first is a placeholder
-            yield Selection(0, other.i1) # TODO may need to substract 1 to other.i1
+            other = first(self._evaluateSelection(selector.other, context))
+            yield context.sub(0, other.start) # TODO may need to subtract 1 to other.start
         elif isinstance(selector, ast.DirectLineSelection):
             # select a specific line by line number; negative to select from end
-            yield from apply_ranges(selector.ranges, context.expand_to_lines().split_lines())
+            yield from apply_ranges(selector.ranges, context.expand_to_lines().split_lines(), adapt_index=True)
         elif isinstance(selector, ast.CursorLineSelection):
             # select a line by that a cursor sits on
             pass # TODO line from selector.other
@@ -167,7 +169,7 @@ class TEQL:
 
     def _evaluateReplacement(self, selection, replacement):
         """
-        Evaluate a replacement string for the given selection, doing any nessesary string interpolation and formatting
+        Evaluate a replacement string for the given selection, doing any necessary string interpolation and formatting
         """
         pass # TODO
 
@@ -183,8 +185,8 @@ class TEQL:
         Sort a series of opcodes by reverse index, and ensure that none of them overlap
         """
         prev = None
-        for opcode in sorted(opcodes, key=lambda op: op.i1, reverse=True):
-            if prev is not None and opcode.i2 > prev.i1:
+        for opcode in sorted(opcodes, key=lambda op: op.start, reverse=True):
+            if prev is not None and opcode.end > prev.start:
                 raise Exception(f'Conflicting/overlapping operations: {opcode} and {prev}')
             prev = opcode
             yield opcode
@@ -229,14 +231,14 @@ class Opcode(str,Enum):
 
 @dataclass
 class Selection:
-    i1:int
-    i2:int
+    start:int
+    end:int
 
 @dataclass
 class Operation:
     opcode:Opcode
-    i1:int
-    i2:int
+    start:int
+    end:int
     value:str=None
 
             
@@ -252,7 +254,7 @@ class VariableStore:
 
     def __getitem__(self, index):
         if isinstance(index, int):
-            return self._postitional[index]
+            return self._positional[index]
         elif isinstance(index, str):
             return self._named[index]
         elif isinstance(index, (list,tuple)):
@@ -266,7 +268,7 @@ class VariableStore:
         if isinstance(index, int):
             if index >= len(self._positional):
                 self._positional.extend([None] * (index - len(self._positional) + 1))
-            self._postitional[index] = value
+            self._positional[index] = value
         elif isinstance(index, str):
             self._named[index] = index
         elif isinstance(index, (list,tuple)):
@@ -275,3 +277,6 @@ class VariableStore:
             return self.__getitem__(index[0]).__setitem__(index[1:])
         else:
             raise KeyError(index)
+    
+    def __repr__(self):
+        return f"VariableStore({repr(self._positional)}, {repr(self._named)})"

@@ -2,18 +2,16 @@ import argparse, sys, io
 from .teql import TEQL
 
 ap = argparse.ArgumentParser('teql', description="Text Editing Query Language\nThe functionality of grep and sed, with the syntax of SQL")
-source_group = ap.add_mutually_exclusive_group()
-source_group.add_argument('script', help='The TEQL script to execute')
-source_group.add_argument('--interactive', '-i', help='Trigger the interactive shell', action='store_true')
+ap.add_argument('script', help='The TEQL script to execute', nargs='?')
 
 def main():
     args = ap.parse_args()
-    if args.interactive:
+    if args.script is None:
         interactive_shell()
-    elif args.script:
-        run_script(args.script)
-    else:
+    elif args.script == '-':
         run_script(sys.stdin)
+    else:
+        run_script(args.script)
 
 
 def interactive_shell():
@@ -23,11 +21,12 @@ def interactive_shell():
     while True:
         line = input('      ' if is_continued else 'teql> ')
         buff.append(line)
-        
-        if line.strip().endswith(';') or line.strip == '': # TODO make this smarter
+        is_continued = True
+        if line.strip().endswith(';') or line.strip() == '': # TODO make this smarter
             # consider this the end of the query
             query = '\n'.join(buff)
             buff = []
+            is_continued = False
             try:
                 result = teql.execute(query)
                 print(result)

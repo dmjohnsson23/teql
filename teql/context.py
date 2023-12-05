@@ -38,7 +38,7 @@ class Context:
             self.data = data
         elif isinstance(data, io.IOBase):
             try:
-                self.data = data.fileno()
+                self.data = mmap(data.fileno(), 0)
             except io.UnsupportedOperation:
                 # Probably not a "real" file, so try to copy into an mmap
                 if isinstance(data, io.BytesIO):
@@ -125,6 +125,19 @@ class Context:
         """
         return Context(self, start, end)
     
+    def string(self, start=None, end=None):
+        if start is None:
+            start = self.start
+        else:
+            start = self.start + start
+        if end is None:
+            end = self.end
+        else:
+            end = self.start + end
+        if end > self.end:
+            raise IndexError()
+        return self.data[start:end].decode(self.encoding)
+    
     def expand_to_lines(self):
         """
         Expand the selection to include only full lines (no partial lines).
@@ -158,8 +171,8 @@ class Context:
         """
         value = self.line_separator
         start = self.start
-        while start < self.stop:
-            index = self.data.find(value, start, self.stop)
+        while start < self.end:
+            index = self.data.find(value, start, self.end)
             if index == -1:
                 break
             end = index + len(value)

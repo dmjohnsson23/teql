@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from lark import Lark, ast_utils, Transformer, v_args
+from lark import ast_utils, Transformer, v_args
 from lark.tree import Meta
 import re
+import sys
 from typing import List, Any, Union
 
 @dataclass
@@ -270,3 +271,6 @@ class ToAst(Transformer):
 
     def start(self, queries):
         return queries
+
+
+transformer = ast_utils.create_transformer(sys.modules[__name__], ToAst())
