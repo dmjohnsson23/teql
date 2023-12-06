@@ -3,6 +3,8 @@ from glob import glob
 from io import TextIOBase
 from dataclasses import dataclass
 from enum import Enum
+
+from .exceptions import TEQLException
 from .parser import parse
 from . import ast
 from .context import Context
@@ -129,7 +131,7 @@ class TEQL:
         elif isinstance(selector, ast.SelectionAfterSelection):
             # select everything in context from the end of the other cursor or selection
             other = last(self._evaluateSelection(selector.other, context))
-            i = len(context) - 1 # TODO is context a string or a file?
+            i = len(context) - 1
             yield context.sub(other.end, i) # TODO may need to add 1 to other.end
         elif isinstance(selector, ast.SelectionBeforeSelection):
             # select everything in context until the start of the other cursor or selection
@@ -140,39 +142,49 @@ class TEQL:
             yield from apply_ranges(selector.ranges, context.expand_to_lines().split_lines(), adapt_index=True)
         elif isinstance(selector, ast.CursorLineSelection):
             # select a line by that a cursor sits on
-            pass # TODO line from selector.other
+            yield context.expand_to_lines()
         elif isinstance(selector, ast.SelectionLineSelection):
             # select individual lines of a larger selection
-            for other in self._evaluateSelection(selector.outer, context):
-                yield from context.sub(other.s1, other.s2).expand_to_lines().split_lines()
+            for other in self._evaluateSelection(selector.other, context):
+                yield from other.expand_to_lines().split_lines()
         elif isinstance(selector, ast.FindSelection):
             # find a selection
-            # expression: _StringMatchExpression
+            # TODO include modifiers:
             # is_next # relative to previous selection
             # is_matching:bool # same indentation as previous selection
             # is_line:bool # select entire line
             # is_with:bool # match only part of a line even if selecting entire line
-            pass # TODO
+            if isinstance(selector.expression, str):
+                yield from context.find_all(selector.expression)
+            elif isinstance(selector.expression, ast.LiteralRegex):
+                yield from context.find_all_re(selector.expression.pattern, selector.expression.flags)
+            elif isinstance(selector.expression, ast.Variable):
+                pass # TODO
+            elif isinstance(selector.expression, ast._Selection):
+                pass # TODO
         elif isinstance(selector, ast.BlockSelection):
             # select a large block from two other selections
             start = first(self._evaluateSelection(selector.start, context))
-            end: last(self._evaluateSelection(selector.start, context.sub(start.end, context.end)))
-            yield context.sub(start.start, end.end)
+            end = last(self._evaluateSelection(selector.end, context))
+            # Ensure both ends exist and the end is after the start
+            if start and end and start.end < end.start:
+                yield context.sub(start.start, end.end)
         elif isinstance(selector, ast.BetweenSelection):
             # select a large block between two other selections
             start = first(self._evaluateSelection(selector.start, context))
-            end: last(self._evaluateSelection(selector.start, context.sub(start.end, context.end)))
-            yield context.sub(start.end, end.start)
+            end = last(self._evaluateSelection(selector.end, context))
+            # Ensure both ends exist and the end is after the start
+            if start and end and start.end < end.start:
+                yield context.sub(start.end, end.start)
         elif isinstance(selector, ast.SubSelection):
             # select a portion of a previous selection
-            # inner: _Selection
-            # outer: _Selection
-            pass # TODO
+            for other in self._evaluateSelection(selector.outer, context):
+                yield from self._evaluateSelection(selector.inner, other)
         elif isinstance(selector, ast.RangeIndexSelection):
             # if a selection has multiple matches, select the nth one
-            # ranges: List[_RangeIndex]
-            # other: _Selection
-            pass # TODO
+            yield from apply_ranges(selector.ranges, self._evaluateSelection(selector.other, context))
+        elif isinstance(selector, ast.FileSelection):
+            yield context.file()
 
     def _evaluateReplacement(self, selection, replacement):
         """

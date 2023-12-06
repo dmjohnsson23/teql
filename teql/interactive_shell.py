@@ -2,6 +2,7 @@ import atexit
 import os
 import readline
 from .teql import TEQL, UpdateResult, SelectResult, SetResult
+from .exceptions import *
 
 class InteractiveShell:
     def __init__(self):
@@ -57,6 +58,6 @@ class InteractiveShell:
                             print(result) # TODO
                         else:
                             print(result)
-                    except Exception as e:
+                    except TEQLException as e:
                         print(e)
                         continue

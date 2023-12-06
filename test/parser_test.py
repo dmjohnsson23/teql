@@ -1,5 +1,5 @@
 from unittest import TestCase
-from teql import parse
+from teql.parser import parse
 from teql import ast
 
 class ParserTest(TestCase):

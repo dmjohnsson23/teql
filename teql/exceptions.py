@@ -1,0 +1,3 @@
+class TEQLException(Exception):
+    pass
+

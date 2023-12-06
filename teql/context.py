@@ -1,7 +1,10 @@
+from functools import reduce
 import re
 import io
 from mmap import mmap
 import sys, os
+from operator import or_
+
 
 class Context:
     data: mmap
@@ -77,7 +80,7 @@ class Context:
         """
         if isinstance(value, str):
             value = value.encode(self.encoding)
-        index = self.data.find(value, self.start, self.stop)
+        index = self.data.find(value, self.start, self.end)
         if index == -1:
             return None
         return Context(self.data, index, index+len(value), encoding=self.encoding, parent=self)
@@ -89,33 +92,33 @@ class Context:
         if isinstance(value, str):
             value = value.encode(self.encoding)
         start = self.start
-        while start < self.stop:
-            index = self.data.find(value, start, self.stop)
+        while start < self.end:
+            index = self.data.find(value, start, self.end)
             if index == -1:
                 break
             start = index + len(value)
             yield Context(self.data, index, start, encoding=self.encoding, parent=self)
     
-    def find_re(self, value):
+    def find_re(self, value, flags=None):
         """
         Get a new context by searching this context using a regular expression
         """
         if isinstance(value, str):
             value = value.encode(self.encoding)
-        pattern = re.compile(value)
+        pattern = re.compile(value, _interpret_flags(flags))
         matched = pattern.search(self.data, self.start, self.end)
         if not matched:
             return None
         return Context(self.data, matched.pos, matched.endpos, encoding=self.encoding, parent=self, _match_data = matched)
     
-    def find_all_re(self, value):
+    def find_all_re(self, value, flags=None):
         """
         Get new contexts by searching this context using a regular expression
         """
         if isinstance(value, str):
             value = value.encode(self.encoding)
-        pattern = re.compile(value)
-        for matched in pattern.findall(self.data, self.start, self.end):
+        pattern = re.compile(value, _interpret_flags(flags))
+        for matched in pattern.finditer(self.data, self.start, self.end):
             yield Context(self.data, matched.pos, matched.endpos, encoding=self.encoding, parent=self, _match_data = matched)
     
     def sub(self, start, end):
@@ -123,6 +126,12 @@ class Context:
         Get a sub-selection (A selection with start/end points relative to this selection)
         """
         return Context(self, start, end)
+    
+    def file(self):
+        """
+        Expand the context selection to the entire file
+        """
+        return Context(self.data, encoding=self.encoding, line_separator=self.line_separator)
     
     def string(self, start=None, end=None):
         if start is None:
@@ -178,3 +187,20 @@ class Context:
             end = index + len(value)
             yield Context(self.data, start, end, encoding=self.encoding, parent=self)
             start = end
+
+
+def _interpret_flags(flags):
+    if flags is None:
+        return 0
+    if isinstance(flags, str):
+        return reduce(or_, map(lambda f: {
+            'i': re.I,
+            'l': re.L,
+            'm': re.M,
+            's': re.S,
+            'u': re.U,
+            'x': re.X,
+        }[f], flags.lower()), 0)
+    if isinstance(flags, int):
+        return flags
+    raise ValueError("Unknown flags: {}")

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from lark import ast_utils, Transformer, v_args
 from lark.tree import Meta
-import re
 import sys
 from typing import List, Any, Union
 
@@ -20,6 +19,11 @@ class Symbol(_Node):
 @dataclass
 class LiteralPath(_Node):
     path: str
+
+@dataclass
+class LiteralRegex(_Node):
+    pattern: str
+    flags: str = None
 
 @dataclass
 class _RangeIndex(_Node):
@@ -59,7 +63,7 @@ class _Cursor(_CursorOrSelection):
 class _Selection(_CursorOrSelection):
     pass
 
-_StringMatchExpression = Union[Variable,str,re.Pattern,_Selection]
+_StringMatchExpression = Union[Variable,str,LiteralRegex,_Selection]
 
 @dataclass
 class StartCursor(_Cursor):
@@ -136,8 +140,8 @@ class SelectionLineSelection(_Selection):
 class FindSelection(_Selection):
     """find a selection"""
     expression: _StringMatchExpression
-    is_next:bool = False
-    is_matching:bool = False
+    is_next:bool = False # TODO belongs to block selector, not here
+    is_matching:bool = False # TODO belongs to block selector, not here
     is_line:bool = False
     is_with:bool = False
     def __init__(self, *args):
@@ -177,6 +181,11 @@ class RangeIndexSelection(_Selection):
     """if a selection has multiple matches, select the nth one"""
     ranges: List[_RangeIndex]
     other: _Selection
+
+@dataclass
+class FileSelection(_Selection):
+    """select the entire file, escaping from any sub-selection"""
+    pass
 
 @dataclass
 class _Query(_Node):
@@ -258,10 +267,6 @@ class ToAst(Transformer):
     def LITERAL_STRING(self, s):
         # Remove quotation marks
         return s[1:-1]
-
-    def LITERAL_REGEX(self, s):
-        # TODO handle flags
-        return re.compile(s[1:-1])
 
     def LITERAL_INT(self, n):
         return int(n)

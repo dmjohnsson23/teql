@@ -21,8 +21,8 @@ set_query: "SET"i (variable | symbol) "="? (symbol | string_expression)
 //========== Cursors and selections ==========//
 ?cursor_or_selection: cursor | selection
 ?cursor: start_cursor | end_cursor | selection_after_cursor | selection_before_cursor | selection_cursor | range_index_cursor | parenthetical_cursor
-?selection: selection_after_selection | selection_before_selection | direct_line_selection | cursor_line_selection | selection_line_selection | find_selection | block_selection | sub_selection | range_index_selection | parenthetical_selection
-?string_match_expression: LITERAL_STRING | LITERAL_REGEX | variable | ( "(" selection ")" )
+?selection: selection_after_selection | selection_before_selection | direct_line_selection | cursor_line_selection | selection_line_selection | find_selection | block_selection | sub_selection | range_index_selection | file_selection | parenthetical_selection
+?string_match_expression: LITERAL_STRING | literal_regex | variable | ( "(" selection ")" )
 ?parenthetical_cursor: "(" cursor ")"
 ?parenthetical_selection: "(" selection ")"
 
@@ -50,6 +50,7 @@ cursor_line_selection: ("LINE"i | "LINES"i) cursor
 // select individual lines of a larger selection
 selection_line_selection: ("LINE"i | "LINES"i) "IN"i selection
 // find a selection
+// TODO "NEXT" and "MATCHING" don't belong here; move to block_selection
 find_selection: "FIND"i KW_NEXT? KW_MATCHING? [KW_LINE KW_WITH?] string_match_expression
 // select a large block from two other selections
 block_selection: "FROM"i cursor_or_selection "TO"i cursor_or_selection
@@ -59,6 +60,8 @@ between_selection: "BETWEEN"i cursor_or_selection "AND"i cursor_or_selection
 sub_selection: selection "IN"i selection
 // if a selection has multiple matches, select the nth one
 range_index_selection: range_index_list "OF"i? selection
+// select the entire file, escaping from any sub-selection
+file_selection: "FILE"i
 
 //========== Ranges/indexes ==========//
 range_index_list: range_index ("," range_index)*
@@ -84,9 +87,9 @@ symbol: NAMED_IDENTIFIER
 NAMED_IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 POSITIONAL_IDENTIFIER: /[0-9]+/
 
-_REGEX_INNER: /.*?/
-_REGEX_ESC_INNER: _REGEX_INNER /(?<!\\)(\\\\)*?/
-LITERAL_REGEX : "/" _REGEX_ESC_INNER "/" /[iLmsux]*/
+REGEX_PATTERN: /(?!\/)(\\\/|\\\\|[^\/])+/
+REGEX_FLAGS: /[ilmsux]+/i
+literal_regex : "/" REGEX_PATTERN "/" REGEX_FLAGS?
 
 _STRING_INNER: /.*?/
 _STRING_ESC_INNER: _STRING_INNER /(?<!\\)(\\\\)*?/
