@@ -1,5 +1,5 @@
 start: query (";" query?)*
-?query: select_query | update_query | set_query
+?query: select_query | update_query | set_query | use_query
 
 //========== SELECT queries ==========//
 select_query: "SELECT"i select_values "FROM"i path
@@ -14,8 +14,9 @@ change_operation: ("CHANGE"i (selection | string_expression) "TO"i string_expres
 delete_operation: "DELETE"i selection
 indent_operation: "INDENT"i LITERAL_INT? cursor_or_selection
 
-//========== UPDATE queries ==========//
+//========== Utility queries ==========//
 set_query: "SET"i (variable | symbol) "="? (symbol | string_expression)
+use_query: "USE"i path
 
 
 //========== Cursors and selections ==========//

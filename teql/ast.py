@@ -251,6 +251,11 @@ class SetQuery(_Node):
     value:Union[str,int,Variable,Symbol]
 
 
+@dataclass
+class UseQuery(_Node):
+    path:str
+
+
 
 
 class ToAst(Transformer):

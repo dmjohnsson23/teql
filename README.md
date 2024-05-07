@@ -11,16 +11,18 @@ I find myself doing a great deal of refactoring. Often this is dull and boring, 
 3. Composing regexes to match properly can sometimes be annoying (especially in regards to whitespace differences)
 4. Preserving indentation when inserting lines can be challenging and messy
 
+Additionally, I occasionally need to edit files which are too large to be opened in a text editor. An editing language like this provides a way to make changes to files without loading them into memory. (I'm not targeting "single pass" editing like sed though)
+
 ## Existing Solutions
 
 There are already some script-based file editing tools. 
 
 * `sed`: Frankly `sed` is difficult to learn, difficult to use, uses difficult to read scripts, is rather inflexible.
-* Perl: The progamming langague is designed around text processing, but it's frankly too powerful for the fairly simple tasks I want to do, I'd like something simpler where I can just throw together a quick query to do what I want and move on, rather than writing a program to do it.
+* Perl: The programming language is designed around text processing, but it's frankly too powerful for the fairly simple tasks I want to do, I'd like something simpler where I can just throw together a quick query to do what I want and move on, rather than writing a program to do it.
 
 ## Proposed Syntax
 
-SQL is a great langauge for making bulk change to a database. Why not use something similar to make bulk changes to text files? For example:
+SQL is a great language for making bulk change to a database. Why not use something similar to make bulk changes to text files? For example:
 
 ```
 UPDATE */rep_current.php
@@ -38,6 +40,7 @@ I see value in the following types of queries to TEQL:
 * `CREATE...FROM`: Create a new file based on the specified file
 * `CREATE DIFF...FROM`: Create a diff file for the changes that would be applied
 * `SET` Set a global variable or session setting
+* `USE` Set the default file to use for all queries, to avoid specifying it each time.
 
 ### Search operations
 
@@ -404,6 +407,7 @@ The following session settings can be configured using a `SET` query:
 
 * encoding: The encoding to use when reading and writing files. Defaults to the system's default encoding. (This is *not* the encoding of the TEQL script itself)
 * linesep: The line separator to use when reading and writing files. Defaults to the system's default line separator.
+* linenumbers: If set to `on`, line numbers will be displayed when printing to sdtout.
 
 ### String interpolation
 

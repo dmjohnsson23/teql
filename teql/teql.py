@@ -15,14 +15,16 @@ class TEQL:
     def __init__(self, *, encoding=None, line_separator=None):
         self.encoding = encoding or sys.getdefaultencoding()
         self.line_separator = line_separator or os.linesep
+        self.line_numbers = None
+        self.use = None
         self.session_variables = VariableStore()
     
     def execute(self, code:str):
         queries = parse(code)
         if not queries:
-            raise Exception('No query to execute')
+            raise TEQLException('No query to execute')
         if len(queries) > 1:
-            raise Exception("Can't execute multiple queries with `execute`, use `execute_all` instead")
+            raise TEQLException("Can't execute multiple queries with `execute`, use `execute_all` instead")
         query = queries[0]
         if isinstance(query, ast.UpdateQuery):
             return self._executeUpdateQuery(query)
@@ -34,7 +36,7 @@ class TEQL:
     def execute_all(self, code:str):
         queries = parse(code)
         if not queries:
-            raise Exception('No queries to execute')
+            raise TEQLException('No queries to execute')
         for query in queries:
             if isinstance(query, ast.UpdateQuery):
                 yield self._executeUpdateQuery(query)
@@ -42,6 +44,8 @@ class TEQL:
                 yield self._executeSelectQuery(query)
             elif isinstance(query, ast.SetQuery):
                 yield self._executeSetQuery(query)
+            elif isinstance(query, ast.UseQuery):
+                yield self._executeUseQuery(query)
 
     def _executeSelectQuery(self, query:ast.SelectQuery):
         return SelectResult(self._executeSelectQueryGetStores(query))
@@ -63,7 +67,7 @@ class TEQL:
                     index += 1
             yield store
         if not path_found:
-            raise Exception(f"File(s) not found: {query.path}")
+            raise TEQLException(f"File(s) not found: {query.path}")
     
     def _evaluateSelectValue(self, value:ast.SelectValue, context: Context):
         if isinstance(value.value, ast._Selection):
@@ -206,7 +210,7 @@ class TEQL:
         prev = None
         for opcode in sorted(opcodes, key=lambda op: op.start, reverse=True):
             if prev is not None and opcode.end > prev.start:
-                raise Exception(f'Conflicting/overlapping operations: {opcode} and {prev}')
+                raise TEQLException(f'Conflicting/overlapping operations: {opcode} and {prev}')
             prev = opcode
             yield opcode
 
@@ -228,17 +232,28 @@ class TEQL:
                     self.encoding = value
                 elif isinstance(value, ast.Symbol) and value.name.lower() in ('posix','unix','lf'):
                     self.line_separator = "\n"
-                if isinstance(value, ast.Symbol) and value.name.lower() in ('windows','dos','crlf'):
+                elif isinstance(value, ast.Symbol) and value.name.lower() in ('windows','dos','crlf'):
                     self.line_separator = "\r\n"
-                if isinstance(value, ast.Symbol) and value.name.lower() == 'cr':
+                elif isinstance(value, ast.Symbol) and value.name.lower() == 'cr':
                     self.line_separator = "\r"
-                if isinstance(value, ast.Symbol) and value.name.lower() == 'lfcr':
+                elif isinstance(value, ast.Symbol) and value.name.lower() == 'lfcr':
                     self.line_separator = "\n\r"
                 else:
                     raise ValueError(f"{value} is not valid for encoding")
+            if query.key.name == 'linenumbers':
+                if isinstance(value, str):
+                    self.line_numbers = value
+                elif isinstance(value, ast.Symbol) and value.name.lower() == 'on':
+                    self.line_numbers = "{} "
+                elif isinstance(value, ast.Symbol) and value.name.lower() == 'off':
+                    self.line_numbers = None
+                else:
+                    raise ValueError(f"{value} is not valid for linenumbers")
         elif isinstance(query.key, ast.Variable):
             self.session_variables[query.key.identifiers] = value
-
+    
+    def _executeUseQuery(self, query:ast.UseQuery):
+        self.use = query.path
 
 class Opcode(str,Enum):
     delete = 'delete'
@@ -323,4 +338,7 @@ class SelectResult(Result):
 class UpdateResult(Result):
     pass
 class SetResult(Result):
+    pass
+
+class UseResult(Result):
     pass
