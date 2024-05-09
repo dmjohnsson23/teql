@@ -1,6 +1,18 @@
 # Text Editor Query Language
 
-Idea for an SQL-inspired language to perform bulk edits to text files
+Idea for an SQL-inspired language to perform bulk edits to text files. This is designed as a more verbose but easier to learn combination of `sed` and `grep`. You would be able to explore and edit a file or set of files from an interactive shell, or run simple queries directly from your system shell.
+
+```
+teql> USE 'somefile.txt';
+teql> SET linenumbers = on;
+teql> SHOW FIND LINE WITH 'grep';
+6  Hey, this is kinda like grep!;
+11 Like grep, we'll print out any lines matching the selector
+teql> REPLACE "grep" IN LINE 6 WITH "sed";
+teql> SHOW LINE 6;
+6  Hey, this is kinda like sed!;
+teql> DELETE EVERYTHING AFTER FIND FIRST LINE LIKE "The End";
+```
 
 ## Rational
 
@@ -429,3 +441,10 @@ Arrays are 1-indexed like in SQL, and as is usually expected with numbering the 
 * Ideally I think we can accomplish this in a single pass for SELECT operations, and two passes for UPDATE operations (one to decide what to do, and one to do it), but right now I'm just focused on making things actually *function*.
 * Python may not be the best language choice, since the goal is to have an efficient way of doing complex batch updates to multiple files (and potentially include it in IDEs!). Right now I'm mostly just prototyping in a "comfortable" language. Might be a good opportunity for me to get proficient with Rust when I rewrite; seems like that would be a better language choice.
 * Because of how parsing is handled, LITERAL_PATH must be followed by a space before you can use a semicolon to end the query. This is annoying and confusing.
+
+* Path arguments to queries should be optional; we can USE the file or apply an optional USING argument
+* UPDATE should be split into several different query types instead of being in one umbrella, and we can instead use transactions to perform all updates simultaneously
+
+Also need to figure out exactly how the values/variable stores work. I could see us having up to three-dimensional values: a SELECT query with multiple selectors, each having potentially multiple matches, executed against multiple files. The "matches" dimension is probably the most problematic, as it would not even be guaranteed to be the same size for all selectors/files. We also need a nice way to "collapse" flat dimensions, like SQL does. I'd also like to have some sort of property access, e.g. for accessing match groups on a regex or other metadata like that. If we could constrain it to two dimensions some how, we could maybe use pandas as a data store.
+
+Ultimately, I think `SELECT` is conceptually too complicated. A `FIND` or `SEARCH` might be a better option, which just looks for matches but doesn't try to distinguish where they came from (Similar to `grep`). (That data could be included in the metadata though.) Perhaps a simplified `SELECT` more similar to `awk` could be created?

@@ -1,10 +1,14 @@
 start: query (";" query?)*
-?query: select_query | update_query | set_query | use_query
+?query: show_query | update_query | set_query | use_query
 
-//========== SELECT queries ==========//
-select_query: "SELECT"i select_values "FROM"i path
-select_values: select_value ("," select_value)*
-select_value: (variable | selection | symbol | LITERAL_STRING) ["AS"i symbol]
+// //========== SELECT queries ==========//
+// select_query: "FROM"i path "SELECT"i select_values
+// select_values: select_value ("," select_value)*
+// select_value: (variable | selection | symbol | LITERAL_STRING) ["AS"i symbol]
+
+//========== SHOW queries ==========//
+show_query: "SHOW"i show_value
+show_value: (variable | selection | symbol | LITERAL_STRING)
 
 //========== UPDATE queries ==========//
 update_query: "UPDATE"i path update_operation+

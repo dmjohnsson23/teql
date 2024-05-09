@@ -28,10 +28,14 @@ class TEQL:
         query = queries[0]
         if isinstance(query, ast.UpdateQuery):
             return self._executeUpdateQuery(query)
+        elif isinstance(query, ast.ShowQuery):
+            return self._executeShowQuery(query)
         elif isinstance(query, ast.SelectQuery):
             return self._executeSelectQuery(query)
         elif isinstance(query, ast.SetQuery):
             return self._executeSetQuery(query)
+        elif isinstance(query, ast.UseQuery):
+            return self._executeUseQuery(query)
 
     def execute_all(self, code:str):
         queries = parse(code)
@@ -40,6 +44,8 @@ class TEQL:
         for query in queries:
             if isinstance(query, ast.UpdateQuery):
                 yield self._executeUpdateQuery(query)
+            elif isinstance(query, ast.ShowQuery):
+                yield self._executeShowQuery(query)
             elif isinstance(query, ast.SelectQuery):
                 yield self._executeSelectQuery(query)
             elif isinstance(query, ast.SetQuery):
@@ -47,6 +53,22 @@ class TEQL:
             elif isinstance(query, ast.UseQuery):
                 yield self._executeUseQuery(query)
 
+    def _iterFileContexts(self):
+        path_found = False
+        for path in glob(self.use):
+            path_found = True
+            with open(path, 'r+b') as file:
+                yield Context(file, encoding=self.encoding, line_separator=self.line_separator)
+        if not path_found:
+            raise TEQLException(f"File(s) not found: {self.use}")
+        
+    def _executeShowQuery(self, query:ast.ShowQuery):
+        if isinstance(query.value.value, ast._Selection):
+            for context in self._iterFileContexts():
+                for selection in self._evaluateSelection(query.value.value, context):
+                    print(selection.string())
+        # TODO all the other things we could show
+    
     def _executeSelectQuery(self, query:ast.SelectQuery):
         return SelectResult(self._executeSelectQueryGetStores(query))
     

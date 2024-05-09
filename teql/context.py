@@ -4,16 +4,20 @@ import io
 from mmap import mmap
 import sys, os
 from operator import or_
+from typing import List
 
 
 class Context:
     data: mmap
     start: int
+    start_line:int = None # Line number of first selected line
     end: int
+    end_line:int = None # Line number of last selected line
     encoding: str
     line_separator: bytes
     parent: 'Context'
     match_data: re.Match
+    highlights: List['Context'] # Any sub-selections which should be highlighted (e.g. the matched term in a selected line)
 
     def __init__(self, data, start=None, end=None, *, encoding=None, line_separator=None, parent=None, _match_data=None):
         """
@@ -187,6 +191,9 @@ class Context:
             end = index + len(value)
             yield Context(self.data, start, end, encoding=self.encoding, parent=self)
             start = end
+    
+    def __len__(self):
+        return self.end - self.start
 
 
 def _interpret_flags(flags):

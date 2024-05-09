@@ -245,6 +245,17 @@ class SelectQuery(_Node):
         self.values = values
         self.path = path
 
+
+@dataclass
+class ShowValue(_Node):
+    value:Union[_Selection,Variable,Symbol,str]
+
+@dataclass
+class ShowQuery(_Node):
+    value:ShowValue
+    def __init__(self, value):
+        self.value = value
+
 @dataclass
 class SetQuery(_Node):
     key:Union[Variable,Symbol]
