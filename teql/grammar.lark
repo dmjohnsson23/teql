@@ -8,7 +8,7 @@ start: query (";" query?)*
 
 //========== SHOW queries ==========//
 show_query: "SHOW"i show_value
-show_value: (variable | selection | symbol | LITERAL_STRING)
+show_value: (variable | selection | LITERAL_STRING)
 
 //========== UPDATE queries ==========//
 update_query: "UPDATE"i path update_operation+
@@ -25,8 +25,8 @@ use_query: "USE"i path
 
 //========== Cursors and selections ==========//
 ?cursor_or_selection: cursor | selection
-?cursor: start_cursor | end_cursor | selection_after_cursor | selection_before_cursor | selection_cursor | range_index_cursor | parenthetical_cursor
-?selection: selection_after_selection | selection_before_selection | direct_line_selection | cursor_line_selection | selection_line_selection | find_selection | block_selection | sub_selection | range_index_selection | file_selection | parenthetical_selection
+?cursor: start_cursor | end_cursor | seek_cursor | offset_cursor | selection_after_cursor | selection_before_cursor | selection_cursor | range_index_cursor | parenthetical_cursor
+?selection: selection_after_selection | selection_before_selection | substring_selection | direct_line_selection | cursor_line_selection | selection_line_selection | find_selection | block_selection | between_selection | sub_selection | range_index_selection | file_selection | parenthetical_selection
 ?string_match_expression: LITERAL_STRING | literal_regex | variable | ( "(" selection ")" )
 ?parenthetical_cursor: "(" cursor ")"
 ?parenthetical_selection: "(" selection ")"
@@ -35,6 +35,10 @@ use_query: "USE"i path
 start_cursor: "START"i
 // place cursor at the end of the current context
 end_cursor: "END"i
+// place cursor at a specific location
+seek_cursor: "SEEK"i LITERAL_INT
+// Offset an existing cursor by a certain amount
+offset_cursor: "OFFSET"i LITERAL_INT "FROM"i cursor
 // place cursor at the after a selection or cursor
 selection_after_cursor: LITERAL_INT? "AFTER"i cursor_or_selection
 // place cursor before a selection or cursor
@@ -45,9 +49,11 @@ selection_cursor: cursor "IN"i selection
 range_index_cursor: range_index_list "OF"i? cursor
 
 // select everything in context from the end of the other cursor or selection
-selection_after_selection: "EVERYTHING"i "AFTER"i cursor_or_selection
+selection_after_selection: "EVERYTHING"i "AFTER"i cursor_or_selection // TODO select an offset/length from the target cursor as well
 // select everything in context until the start of the other cursor or selection
-selection_before_selection: "EVERYTHING"i "BEFORE"i cursor_or_selection
+selection_before_selection: "EVERYTHING"i "BEFORE"i cursor_or_selection // TODO select an offset/length from the target cursor as well
+// select a specific range of offsets
+substring_selection: "SUBSTRING"i LITERAL_INT "TO"i LITERAL_INT
 // select a specific line by line number; negative to select from end
 direct_line_selection: ("LINE"i | "LINES"i) range_index_list
 // select a line by that a cursor sites on

@@ -11,7 +11,7 @@ teql> SHOW FIND LINE WITH 'grep';
 teql> REPLACE "grep" IN LINE 6 WITH "sed";
 teql> SHOW LINE 6;
 6  Hey, this is kinda like sed!;
-teql> DELETE EVERYTHING AFTER FIND FIRST LINE LIKE "The End";
+teql> DELETE EVERYTHING AFTER FIND "The End";
 ```
 
 ## Rational
@@ -23,16 +23,35 @@ I find myself doing a great deal of refactoring. Often this is dull and boring, 
 3. Composing regexes to match properly can sometimes be annoying (especially in regards to whitespace differences)
 4. Preserving indentation when inserting lines can be challenging and messy
 
-Additionally, I occasionally need to edit files which are too large to be opened in a text editor. An editing language like this provides a way to make changes to files without loading them into memory. (I'm not targeting "single pass" editing like sed though)
+Additionally, I occasionally need to edit files which are too large to be opened in a text editor. An editing language like this provides a way to make changes to files without loading the entire thing into memory at once.
 
-## Existing Solutions
+## Comparison to Existing Solutions
 
-There are already some script-based file editing tools. 
+There are already some script-based file editing/search tools. 
 
-* `sed`: Frankly `sed` is difficult to learn, difficult to use, uses difficult to read scripts, is rather inflexible.
-* Perl: The programming language is designed around text processing, but it's frankly too powerful for the fairly simple tasks I want to do, I'd like something simpler where I can just throw together a quick query to do what I want and move on, rather than writing a program to do it.
+### `sed`
+
+Frankly `sed` is difficult to learn, difficult to use, uses difficult to read scripts, is rather inflexible. 
+
+TEQL aims to be much more friendly. It also opts for a more robust feature set, making it easy to perform operations that are hard or impossible in `sed`, like search queries that span multiple lines.
+
+However, TEQL is more verbose. It is also less efficient than `sed`, requiring multiple passes over the file to perform operations compared to `sed`'s single-pass approach. TEQL will also use much more memory than `sed`: we are memory-mapping the file, which should still be efficient enough to load very large files, but it will likely take much longer to perform operations on these files than `sed`'s streaming approach.
+
+### `grep`
+
+`grep` is likely superior to TEQL for simple use cases, but TEQL aims for the more complex use cases that may be a little more advanced than what you can easily due with `grep`
+
+### `awk`
+
+TEQL and `awk` are not entirely comparable, though there is some overlap. TEQL aims to be a more general search tool that, in spite of being inspired by the syntax of SQL, doesn't actually try to operate on files with a row/column paradigm. `awk` is better suited for parsing data from files where lines can conceptually be thought of as table rows. TEQL is better suited for searching through less predictable text, such as programming language files or text documents.
+
+### Perl
+
+The Perl programming language is designed around text processing, but it's frankly too powerful for the fairly simple tasks TEQL targets. TEQL is designed to be "quick and dirty" rather than writing a script to do the task. Perl may be a good choice for more complex work, however.
 
 ## Proposed Syntax
+
+*The syntax is still in a constant state of flux ad evolution; nothing below is guaranteed to be final.*
 
 SQL is a great language for making bulk change to a database. Why not use something similar to make bulk changes to text files? For example:
 
@@ -439,7 +458,7 @@ Arrays are 1-indexed like in SQL, and as is usually expected with numbering the 
 ## TODOs
 
 * Ideally I think we can accomplish this in a single pass for SELECT operations, and two passes for UPDATE operations (one to decide what to do, and one to do it), but right now I'm just focused on making things actually *function*.
-* Python may not be the best language choice, since the goal is to have an efficient way of doing complex batch updates to multiple files (and potentially include it in IDEs!). Right now I'm mostly just prototyping in a "comfortable" language. Might be a good opportunity for me to get proficient with Rust when I rewrite; seems like that would be a better language choice.
+* Python may not be the best language choice, since the goal is to have an efficient way of doing complex batch updates to multiple files (and potentially include it in IDEs!) or edit operations of files too large to load into a text editor. Right now I'm mostly just prototyping in a "comfortable" language. Might be a good opportunity for me to get proficient with Rust when I rewrite; seems like that would be a better language choice. To really get it to be efficient, I may need to write my own regex engine as well, to give myself more fine-grained control and integrate with the other higher-level pattern matching we are doing. But that sounds scary, and for now I just want something that *functions*.
 * Because of how parsing is handled, LITERAL_PATH must be followed by a space before you can use a semicolon to end the query. This is annoying and confusing.
 
 * Path arguments to queries should be optional; we can USE the file or apply an optional USING argument

@@ -137,8 +137,17 @@ class TEQL:
         if isinstance(selector, ast.StartCursor):
             yield context.sub(0,0)
         elif isinstance(selector, ast.EndCursor):
-            i = len(context) - 1
+            i = len(context)
             yield context.sub(i,i)
+        elif isinstance(selector, ast.SeekCursor):
+            i = selector.offset
+            if (i < 0):
+                i = len(context) + i
+            yield context.sub(i, i)
+        elif isinstance(selector, ast.OffsetCursor):
+            for other in self._evaluateSelection(selector.other, context):
+                i = other.start + selector.offset
+                yield context.sub(i, i)
         elif isinstance(selector, ast.SelectionAfterCursor):
             for other in self._evaluateSelection(selector.other, context):
                 i = other.end + (selector.n or 1) # TODO maybe should be 0
@@ -157,12 +166,15 @@ class TEQL:
         elif isinstance(selector, ast.SelectionAfterSelection):
             # select everything in context from the end of the other cursor or selection
             other = last(self._evaluateSelection(selector.other, context))
-            i = len(context) - 1
-            yield context.sub(other.end, i) # TODO may need to add 1 to other.end
+            i = len(context)
+            yield context.sub(other.end, i)
         elif isinstance(selector, ast.SelectionBeforeSelection):
             # select everything in context until the start of the other cursor or selection
             other = first(self._evaluateSelection(selector.other, context))
             yield context.sub(0, other.start) # TODO may need to subtract 1 to other.start
+        elif isinstance(selector, ast.SubstringSelection):
+            # select everything in context until the start of the other cursor or selection
+            yield context.sub(selector.start, selector.end)
         elif isinstance(selector, ast.DirectLineSelection):
             # select a specific line by line number; negative to select from end
             yield from apply_ranges(selector.ranges, context.expand_to_lines().split_lines(), adapt_index=True)
@@ -193,14 +205,14 @@ class TEQL:
             start = first(self._evaluateSelection(selector.start, context))
             end = last(self._evaluateSelection(selector.end, context))
             # Ensure both ends exist and the end is after the start
-            if start and end and start.end < end.start:
+            if start is not None and end is not None and start.end <= end.start:
                 yield context.sub(start.start, end.end)
         elif isinstance(selector, ast.BetweenSelection):
             # select a large block between two other selections
             start = first(self._evaluateSelection(selector.start, context))
             end = last(self._evaluateSelection(selector.end, context))
             # Ensure both ends exist and the end is after the start
-            if start and end and start.end < end.start:
+            if start is not None and end is not None and start.end <= end.start:
                 yield context.sub(start.end, end.start)
         elif isinstance(selector, ast.SubSelection):
             # select a portion of a previous selection
@@ -208,7 +220,7 @@ class TEQL:
                 yield from self._evaluateSelection(selector.inner, other)
         elif isinstance(selector, ast.RangeIndexSelection):
             # if a selection has multiple matches, select the nth one
-            yield from apply_ranges(selector.ranges, self._evaluateSelection(selector.other, context))
+            yield from apply_ranges(selector.ranges, self._evaluateSelection(selector.other, context), adapt_index=True)
         elif isinstance(selector, ast.FileSelection):
             yield context.file()
 

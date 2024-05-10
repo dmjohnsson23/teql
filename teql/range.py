@@ -17,10 +17,9 @@ def apply_ranges(ranges:Collection[ast._RangeIndex], select_from:Collection, ada
         if isinstance(r, ast.RangeIndexLast):
             if r.n is None:
                 yield select_from[-1]
-                prev = len(select_from) - 1
             else:
                 yield from select_from[-r.n:]
-                prev = len(select_from) - r.n
+            prev = len(select_from) - 1
         if isinstance(r, ast.RangeIndexNext):
             if r.n is None:
                 yield select_from[prev+1]
@@ -34,7 +33,7 @@ def apply_ranges(ranges:Collection[ast._RangeIndex], select_from:Collection, ada
         if isinstance(r, ast.RangeIndexRange):
             start = adapter(r.start)
             end = adapter(r.end)
-            yield from select_from[start:end:r.step]
+            yield from select_from[start:end+1:r.step]
             # TODO account for negative indices
             prev = min(r.end, len(select_from)) - 1
             if r.step != 1:

@@ -75,6 +75,19 @@ class EndCursor(_Cursor):
     """place cursor at the end of the current context"""
     pass
 
+
+@dataclass
+class SeekCursor(_Cursor):
+    """place cursor at the specified absolute offset"""
+    offset: int
+
+
+@dataclass
+class OffsetCursor(_Cursor):
+    """place cursor at the specified offset relative to another cursor"""
+    offset: int
+    other: _Cursor
+
 @dataclass
 class SelectionAfterCursor(_Cursor):
     """place cursor at the after a selection or cursor"""
@@ -82,10 +95,10 @@ class SelectionAfterCursor(_Cursor):
     n: int = None
     def __init__(self, *args):
         if len(args) == 1:
-            other = args[0]
+            self.other = args[0]
         else:
-            n = args[0]
-            other = args[1]
+            self.n = args[0]
+            self.other = args[1]
 
 @dataclass
 class SelectionBeforeCursor(_Cursor):
@@ -94,10 +107,10 @@ class SelectionBeforeCursor(_Cursor):
     n: int = None
     def __init__(self, *args):
         if len(args) == 1:
-            other = args[0]
+            self.other = args[0]
         else:
-            n = args[0]
-            other = args[1]
+            self.n = args[0]
+            self.other = args[1]
 
 @dataclass
 class SelectionCursor(_Cursor):
@@ -120,6 +133,12 @@ class SelectionAfterSelection(_Selection):
 class SelectionBeforeSelection(_Selection):
     """select everything in context until the start of the other cursor or selection"""
     other: _CursorOrSelection
+
+@dataclass
+class SubstringSelection(_Selection):
+    """select everything in context until the start of the other cursor or selection"""
+    start: int
+    end: int
 
 @dataclass
 class DirectLineSelection(_Selection):

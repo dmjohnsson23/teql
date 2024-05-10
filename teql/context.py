@@ -138,12 +138,19 @@ class Context:
         return Context(self.data, encoding=self.encoding, line_separator=self.line_separator)
     
     def string(self, start=None, end=None):
+        """
+        Return an encoded string (or substring).
+        """
         if start is None:
             start = self.start
+        elif start < 0:
+            start = self.end + start
         else:
             start = self.start + start
         if end is None:
             end = self.end
+        elif end < 0:
+            end = self.end + end
         else:
             end = self.start + end
         if end > self.end:
@@ -194,6 +201,15 @@ class Context:
     
     def __len__(self):
         return self.end - self.start
+    
+    def __repr__(self):
+        if self.start == self.end:
+            return f"Cursor @ {self.start}"
+        if len(self) < 60:
+            string = repr(self.string())
+        else:
+            string = f"{repr(self.string(0, 29))}...{repr(self.string(-28))}"
+        return f"Selection @ {self.start}-{self.end}: {string}"
 
 
 def _interpret_flags(flags):
