@@ -33,9 +33,11 @@ def apply_ranges(ranges:Collection[ast._RangeIndex], select_from:Collection, ada
         if isinstance(r, ast.RangeIndexRange):
             start = adapter(r.start)
             end = adapter(r.end)
+            # Note: index ranges are inclusive (e.g. contain the end value), differing from normal Python ranges
             yield from select_from[start:end+1:r.step]
+            # Set prev to the end value of the selected range, or the end value of the full collection; whichever is first
             # TODO account for negative indices
-            prev = min(r.end, len(select_from)) - 1
+            prev = min(r.end, len(select_from)) 
             if r.step != 1:
                 prev -= (prev - r.start) % r.step
 

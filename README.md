@@ -33,7 +33,7 @@ There are already some script-based file editing/search tools.
 
 Frankly `sed` is difficult to learn, difficult to use, uses difficult to read scripts, is rather inflexible. 
 
-TEQL aims to be much more friendly. It also opts for a more robust feature set, making it easy to perform operations that are hard or impossible in `sed`, like search queries that span multiple lines.
+TEQL aims to be much more friendly, saving time by requiring less googling to get things done. It also opts for a more robust feature set, making it easy to perform operations that are hard or impossible in `sed`, like search queries that span multiple lines.
 
 However, TEQL is more verbose. It is also less efficient than `sed`, requiring multiple passes over the file to perform operations compared to `sed`'s single-pass approach. TEQL will also use much more memory than `sed`: we are memory-mapping the file, which should still be efficient enough to load very large files, but it will likely take much longer to perform operations on these files than `sed`'s streaming approach.
 
@@ -65,17 +65,63 @@ WHERE ANY LINE = '<?php if ($_SESSION['level'] >= UserLevel::READ_ONLY) { ?>'
 
 I see value in the following types of queries to TEQL:
 
-* `SELECT...FROM`: A simple search feature
-* `UPDATE`: Actually perform updates to the file
-* `PREVIEW UPDATE`: The same as update, but write to stdout instead of overwriting the file
-* `CREATE...FROM`: Create a new file based on the specified file
-* `CREATE DIFF...FROM`: Create a diff file for the changes that would be applied
-* `SET` Set a global variable or session setting
-* `USE` Set the default file to use for all queries, to avoid specifying it each time.
+* `SHOW`: Output a selection, variable, etc...
+* `INSERT <value> AT <cursor>`: Insert a value at a given cursor
+* `CHANGE <selection> TO <value>`: Replace a selection with a new value
+* `DELETE <selection>`: Delete a selection
+* `INDENT <amount> <selection|cursor>`: Indent (or unindent) a selection by a given amount
+* `PREVIEW <insert|change|delete|indent>`: Preview one of the above update queries, but write to stdout instead of overwriting the file
+* `PREVIEW DIFF <insert|change|delete|indent>`: Write a diff of an update query to stdout
+* `CREATE <file> FROM <insert|change|delete|indent>`: Create a new file based on the specified file
+* `CREATE DIFF <file> FROM <insert|change|delete|indent>`:  Create a diff file for the changes that would be applied
+* `SET`: Set a global variable or session setting
+* `USE <file>`: Set the default file to use for all queries, to avoid specifying it each time.
+* `BEGIN`/`COMMIT`: Atomic operation blocks (e.g., all update queries in the block will be performed simultaneously rather than sequentially)
+
+### Selectors
+
+* `START`: Place the cursor at the start of the current context context
+* `END`: Place the cursor at the end of the current context context
+* `SEEK <int>`: Place the cursor at a specific location within the current context context
+* `OFFSET <int> FROM <cursor>`: Move a cursor by a specific relative offset
+* `<int?> AFTER <selection|cursor>`: Place a cursor at a specific offset from the end of the other selection
+* `<int?> BEFORE <selection|cursor>`: Place a cursor at a specific offset from the start of the other selection
+* `<cursor> IN <selection>`: Evaluate the cursor using the selection as the context
+* `EVERYTHING AFTER <cursor|selection>`: Selects everything in the current context after the cursor or selection
+* `EVERYTHING BEFORE <cursor|selection>`: Selects everything in the current context after the cursor or selection
+* `SUBSTRING <int> TO <int>`: Shorthand for `(FROM SEEK <int> TO SEEK <int>)`
+* `LINE[S] <range_index_list>`: Select a specific line or lines by line number; use negative values to select from end
+* `LINE[S] <cursor>`: Select the line that a cursor sits on
+* `LINE[S] IN <selection>`: Separately select each individual line of another selection
+* `FIND <string|regex>`: Select each matching string in the current context
+* `FIND LINE[S] WITH <string|regex>`: Select each line in the current context containing one or more matching strings
+* `FROM <cursor|selection> TO <cursor|selection>` Select a block from the first selection to the second (including the two end block)
+* `FROM <cursor> TO LENGTH <int>` Select a block starting from the cursor and taking in a number of bytes
+* `BETWEEN <cursor|selection> AND <cursor|selection>` Select a block between the first selection and the second (not including wither end block)
+* `<selection> IN <selection>`: Evaluate the first selection using the second selection as the context
+* `<range_index_list> OF <selection>`: If a selection has multiple matches, select the nth one
+* `FILE`: Select the entire file, escaping from the current context
 
 ### Search operations
 
-WIP Section
+Searching is done by `SHOW`ing a selector, which will output all matching selections. For example:
+
+```
+SHOW LINE 6;
+-- Outputs the contents of line 6
+SHOW FILE;
+-- Outputs the entire file
+SHOW BETWEEN FIND "beginning of section" AND FIND "end of section";
+-- Outputs everything between the two matched sections
+SHOW EVERYTHING AFTER FIND /end/i;
+-- Outputs everything from the match to the end (uses the last match if there are multiple)
+SHOW FIND LINES WITH 'cheese';
+-- Outputs each line that contains the word "cheese"
+```
+
+### Select operations
+
+*WIP Section - not implemented, might be dropped or changed significantly.*
 
 Still working out how to work with getting data from file contents versus the file itself. This doesn't translate perfectly to a nice flat "table"
 
@@ -105,14 +151,6 @@ The idea would be to allow asking questions like this about a codebase:
 * Where is this or that bad programming practice used? (e.g. search for syntax patterns you want to get rid of)
 
 ### Editing operations
-
-These would be supported on all query types except `SELECT`.
-
-* `INSERT...[BEFORE|AFTER|AT]`
-* `CHANGE...TO`
-* `DELETE`
-* `DELETE...[BEFORE|AFTER|AT]`
-* `INDENT [amount]`
 
 #### INSERT
 

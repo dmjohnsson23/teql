@@ -1,9 +1,9 @@
 import sys, os
 from glob import glob
-from io import TextIOBase
 from dataclasses import dataclass
-from enum import Enum
 
+from teql.editor import Editor
+from .operation import Opcode, Operation
 from .exceptions import TEQLException
 from .parser import parse
 from . import ast
@@ -26,7 +26,7 @@ class TEQL:
         if len(queries) > 1:
             raise TEQLException("Can't execute multiple queries with `execute`, use `execute_all` instead")
         query = queries[0]
-        if isinstance(query, ast.UpdateQuery):
+        if isinstance(query, ast._UpdateQuery):
             return self._executeUpdateQuery(query)
         elif isinstance(query, ast.ShowQuery):
             return self._executeShowQuery(query)
@@ -42,7 +42,7 @@ class TEQL:
         if not queries:
             raise TEQLException('No queries to execute')
         for query in queries:
-            if isinstance(query, ast.UpdateQuery):
+            if isinstance(query, ast._UpdateQuery):
                 yield self._executeUpdateQuery(query)
             elif isinstance(query, ast.ShowQuery):
                 yield self._executeShowQuery(query)
@@ -99,34 +99,35 @@ class TEQL:
         # TODO other types
 
     
-    def _executeUpdateQuery(self, query:ast.UpdateQuery):
-        for path in glob(query.path):
+    def _executeUpdateQuery(self, query:ast._UpdateQuery):
+        editor = self._evaluateUpdateQuery(query)
+        # TODO
+
+    def _evaluateUpdateQuery(self, query:ast._UpdateQuery):
+        for context in self._iterFileContexts():
             opcodes = []
-            with open(path, 'r+b') as file:
-                context = Context(file, encoding=self.encoding, line_separator=self.line_separator)
-                for operation in query.operations:
-                    opcodes.append(self._getUpdateOperationOpcodes(operation, context))
-                self._doUpdateOperationOpcodes(opcodes, context)
+            opcodes.extend(self._getUpdateOperationOpcodes(query, context))
+            return Editor(context, self._normalizeOpcodeList(opcodes))
     
-    def _getUpdateOperationOpcodes(self, operation, context:Context):
+    def _getUpdateOperationOpcodes(self, query:ast._UpdateQuery, context:Context):
         """
         Generate a series of opcodes for the operations to apply to the file
         """
-        if isinstance(operation, ast.InsertOperation):
-            for sel in self._evaluateSelection(operation.cursor, context):
+        if isinstance(query, ast.InsertQuery):
+            for sel in self._evaluateSelection(query.cursor, context):
                 # TODO add newlines if operation.is_line = True
-                yield Opcode.insert(sel.start, sel.end, self._evaluateReplacement(sel, operation.string))
-        elif isinstance(operation, ast.ChangeOperation):
-            if not isinstance(operation.selection, ast._Selection):
+                yield Opcode.insert(sel.start, sel.end, self._evaluateReplacement(sel, query.string))
+        elif isinstance(query, ast.ChangeQuery):
+            if not isinstance(query.selection, ast._Selection):
                 selection = ast.FindSelection(selection)
             else:
-                selection = operation.selection
+                selection = query.selection
             for sel in self._evaluateSelection(selection, context):
-                yield Opcode.replace(sel.start, sel.end, self._evaluateReplacement(sel, operation.replacement))
-        if isinstance(operation, ast.DeleteOperation):
-            for sel in self._evaluateSelection(operation.selection, context):
+                yield Opcode.replace(sel.start, sel.end, self._evaluateReplacement(sel, query.replacement))
+        if isinstance(query, ast.DeleteQuery):
+            for sel in self._evaluateSelection(query.selection, context):
                 yield Opcode.delete(sel.start, sel.end)
-        if isinstance(operation, ast.IndentOperation):
+        if isinstance(query, ast.IndentQuery):
             # TODO
             pass
     
@@ -180,7 +181,8 @@ class TEQL:
             yield from apply_ranges(selector.ranges, context.expand_to_lines().split_lines(), adapt_index=True)
         elif isinstance(selector, ast.CursorLineSelection):
             # select a line by that a cursor sits on
-            yield context.expand_to_lines()
+            for other in self._evaluateSelection(selector.other, context):
+                yield other.expand_to_lines()
         elif isinstance(selector, ast.SelectionLineSelection):
             # select individual lines of a larger selection
             for other in self._evaluateSelection(selector.other, context):
@@ -203,7 +205,10 @@ class TEQL:
         elif isinstance(selector, ast.BlockSelection):
             # select a large block from two other selections
             start = first(self._evaluateSelection(selector.start, context))
-            end = last(self._evaluateSelection(selector.end, context))
+            if isinstance(selector.end, ast.LengthCursor):
+                end = start + selector.end.length
+            else:
+                end = last(self._evaluateSelection(selector.end, context))
             # Ensure both ends exist and the end is after the start
             if start is not None and end is not None and start.end <= end.start:
                 yield context.sub(start.start, end.end)
@@ -228,22 +233,18 @@ class TEQL:
         """
         Evaluate a replacement string for the given selection, doing any necessary string interpolation and formatting
         """
-        pass # TODO
-
-    def _doUpdateOperationOpcodes(self, opcodes, file):
-        """
-        Given a series of opcodes, modify the file
-        """
-        for opcode in self._normalizeOpcodeList(opcodes):
-            pass # todo
+        if isinstance(replacement, str):
+            return replacement
+        # TODO: variables and so forth; regex replacements
     
     def _normalizeOpcodeList(self, opcodes:List['Operation']):
         """
-        Sort a series of opcodes by reverse index, and ensure that none of them overlap
+        Sort a series of opcodes by index, and ensure that none of them overlap
         """
         prev = None
-        for opcode in sorted(opcodes, key=lambda op: op.start, reverse=True):
-            if prev is not None and opcode.end > prev.start:
+        print(opcodes)
+        for opcode in sorted(opcodes, key=lambda op: op.start):
+            if prev is not None and opcode.start < prev.end:
                 raise TEQLException(f'Conflicting/overlapping operations: {opcode} and {prev}')
             prev = opcode
             yield opcode
@@ -289,25 +290,11 @@ class TEQL:
     def _executeUseQuery(self, query:ast.UseQuery):
         self.use = query.path
 
-class Opcode(str,Enum):
-    delete = 'delete'
-    replace = 'replace'
-    insert = 'insert'
-
-    def __call__(self, *args):
-        return Operation(self, *args)
 
 @dataclass
 class Selection:
     start:int
     end:int
-
-@dataclass
-class Operation:
-    opcode:Opcode
-    start:int
-    end:int
-    value:str=None
 
             
 class VariableStore:

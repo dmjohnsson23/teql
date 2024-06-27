@@ -13,6 +13,10 @@ class Variable(_Node):
     identifiers:List[Union[str,int]]
 
 @dataclass
+class SelectionVariable(_Node):
+    identifiers:List[Union[str,int]]
+
+@dataclass
 class Symbol(_Node):
     name: str
 
@@ -87,6 +91,11 @@ class OffsetCursor(_Cursor):
     """place cursor at the specified offset relative to another cursor"""
     offset: int
     other: _Cursor
+
+@dataclass
+class LengthCursor(_Cursor):
+    """An offset cursor usable only as the second parameter of FROM selectors"""
+    length: int
 
 @dataclass
 class SelectionAfterCursor(_Cursor):
@@ -181,7 +190,7 @@ class FindSelection(_Selection):
 class BlockSelection(_Selection):
     """select a large block from two other selections"""
     start: _CursorOrSelection
-    end: _CursorOrSelection
+    end: Union[_CursorOrSelection,LengthCursor]
 
 @dataclass
 class BetweenSelection(_Selection):
@@ -209,20 +218,12 @@ class FileSelection(_Selection):
 @dataclass
 class _Query(_Node):
     pass
-
-class _UpdateOperation(_Node):
+@dataclass
+class _UpdateQuery(_Node):
     pass
 
 @dataclass
-class UpdateQuery(_Node):
-    path:str
-    operations:List[_UpdateOperation]
-    def __init__(self, path, *operations):
-        self.path = path
-        self.operations = operations
-
-@dataclass
-class InsertOperation(_UpdateOperation):
+class InsertQuery(_UpdateQuery):
     string:Union[str,Variable]
     cursor: _Cursor
     is_line:bool = False
@@ -233,16 +234,16 @@ class InsertOperation(_UpdateOperation):
         self.string, self.cursor = args
 
 @dataclass
-class ChangeOperation(_UpdateOperation):
+class ChangeQuery(_UpdateQuery):
     selection: Union[_Selection,Variable,str]
     replacement: Union[Variable,str]
     
 @dataclass
-class DeleteOperation(_UpdateOperation):
+class DeleteQuery(_UpdateQuery):
     selection: _Selection
 
 @dataclass
-class IndentOperation(_UpdateOperation):
+class IndentQuery(_UpdateQuery):
     selection: _CursorOrSelection
     amount: int = None
     def __init__(self, *args):

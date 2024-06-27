@@ -123,7 +123,7 @@ class Context:
             value = value.encode(self.encoding)
         pattern = re.compile(value, _interpret_flags(flags))
         for matched in pattern.finditer(self.data, self.start, self.end):
-            yield Context(self.data, matched.pos, matched.endpos, encoding=self.encoding, parent=self, _match_data = matched)
+            yield Context(self.data, matched.start(), matched.end(), encoding=self.encoding, parent=self, _match_data = matched)
     
     def sub(self, start, end):
         """
@@ -137,9 +137,9 @@ class Context:
         """
         return Context(self.data, encoding=self.encoding, line_separator=self.line_separator)
     
-    def string(self, start=None, end=None):
+    def bytes(self, start=None, end=None):
         """
-        Return an encoded string (or substring).
+        Return the raw unencoded bytes between the two indices
         """
         if start is None:
             start = self.start
@@ -155,7 +155,13 @@ class Context:
             end = self.start + end
         if end > self.end:
             raise IndexError()
-        return self.data[start:end].decode(self.encoding)
+        return self.data[start:end]
+    
+    def string(self, start=None, end=None):
+        """
+        Return an encoded string (or substring).
+        """
+        return self.bytes(start, end).decode(self.encoding)
     
     def expand_to_lines(self):
         """
@@ -178,11 +184,14 @@ class Context:
         if self.end == size:
             end = self.end
         else:
-            # Track forward to the next EOL
-            next_eol = self.data.find(self.line_separator, self.end - len_eol)
-            if next_eol == -1:
+            # Track forward to the next EOL, unless the selection already ends with EOL
+            end = self.data.find(self.line_separator, max(0, self.end - len_eol))
+            if end == -1:
                 # Failed to find any subsequent EOL; go to the end of the file
                 end = prev_eol + len_eol
+            else:
+                # Include the line ending in the result
+                end += len_eol
         return Context(self.data, start, end, encoding=self.encoding, line_separator=self.line_separator)
 
     def split_lines(self):

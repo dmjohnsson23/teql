@@ -46,15 +46,15 @@ class ApplyRangesTest(TestCase):
         result = apply_ranges([ast.RangeIndexIndex(3), ast.RangeIndexNext()], sample)
         self.assertEqual(list(result), [3, 4])
 
-    def test_index(self):
+    def test_index_range(self):
         sample = list(range(10))
         result = apply_ranges([ast.RangeIndexRange(3, 5)], sample)
-        self.assertEqual(list(result), [3, 4])
+        self.assertEqual(list(result), [3, 4, 5])
         result = apply_ranges([ast.RangeIndexRange(3, 15)], sample)
         self.assertEqual(list(result), [3, 4, 5, 6, 7, 8, 9])
         # Ensure next is also set
         result = apply_ranges([ast.RangeIndexRange(3, 5), ast.RangeIndexNext()], sample)
-        self.assertEqual(list(result), [3, 4, 5])
+        self.assertEqual(list(result), [3, 4, 5, 6])
 
     def test_index_w_step(self):
         sample = list(range(10))
