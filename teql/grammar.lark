@@ -25,7 +25,7 @@ use_query: "USE"i path
 
 
 //========== Cursors and selections ==========//
-?cursor_or_selection: cursor | selection
+?cursor_or_selection: cursor | selection | union | parenthetical_union
 ?cursor: start_cursor | end_cursor | seek_cursor | offset_cursor | selection_after_cursor | selection_before_cursor | selection_cursor | range_index_cursor | parenthetical_cursor
 ?selection: selection_after_selection | selection_before_selection | substring_selection | direct_line_selection | cursor_line_selection | selection_line_selection | find_selection | block_selection | between_selection | sub_selection | range_index_selection | file_selection | parenthetical_selection
 ?string_match_expression: LITERAL_STRING | literal_regex | variable | ( "(" selection ")" )
@@ -50,6 +50,8 @@ selection_cursor: cursor "IN"i selection
 range_index_cursor: range_index_list "OF"i? cursor
 // An offset cursor usable only as the second parameter of FROM selectors
 length_cursor: "LENGTH" LITERAL_INT
+// place a cursor only if the condition is met
+conditional_cursor: cursor conditional
 
 // select everything in context from the end of the other cursor or selection
 selection_after_selection: "EVERYTHING"i "AFTER"i cursor_or_selection
@@ -76,6 +78,18 @@ sub_selection: selection "IN"i selection
 range_index_selection: range_index_list "OF"i? selection
 // select the entire file, escaping from any sub-selection
 file_selection: "FILE"i
+// make a selection only if the condition is met
+conditional_selection: selection conditional
+
+// TODO: *Immediately* preceeded/followed by
+?conditional: conditional_before | conditional_after | conditional_exists
+conditional_before: "WHERE"i "PRECEDED"i "BY"i cursor_or_selection
+conditional_after: "WHERE"i "FOLLOWED"i "BY"i cursor_or_selection
+conditional_exists: "WHERE"i "EXISTS"i cursor_or_selection
+// TODO unions of all cursors or all selections should be considered cusrors and selections respectively.
+union: (cursor|selection) ("OR"i (cursor|selection))+
+?parenthetical_union: "(" union ")"
+
 
 //========== Ranges/indexes ==========//
 range_index_list: range_index ("," range_index)*

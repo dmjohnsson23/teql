@@ -1,7 +1,7 @@
 import sys, os
 from glob import glob
 from dataclasses import dataclass
-
+from tempfile import NamedTemporaryFile
 from teql.editor import Editor
 from .operation import Opcode, Operation
 from .exceptions import TEQLException
@@ -58,13 +58,13 @@ class TEQL:
         for path in glob(self.use):
             path_found = True
             with open(path, 'r+b') as file:
-                yield Context(file, encoding=self.encoding, line_separator=self.line_separator)
+                yield path, Context(file, encoding=self.encoding, line_separator=self.line_separator)
         if not path_found:
             raise TEQLException(f"File(s) not found: {self.use}")
         
     def _executeShowQuery(self, query:ast.ShowQuery):
         if isinstance(query.value.value, ast._Selection):
-            for context in self._iterFileContexts():
+            for path,context in self._iterFileContexts():
                 for selection in self._evaluateSelection(query.value.value, context):
                     print(selection.string())
         # TODO all the other things we could show
@@ -100,14 +100,21 @@ class TEQL:
 
     
     def _executeUpdateQuery(self, query:ast._UpdateQuery):
-        editor = self._evaluateUpdateQuery(query)
-        # TODO
+        for path, editor in self._evaluateUpdateQuery(query):
+            self._overwriteFile(path, editor)
+    
+    def _overwriteFile(self, path, editor:Editor):
+        with NamedTemporaryFile('wb', prefix='.teql.', dir=os.path.dirname(path), delete=False) as temp:
+            editor(temp.file)
+            editor.context.data.close()
+            name = temp.name
+        os.replace(name, path)
 
     def _evaluateUpdateQuery(self, query:ast._UpdateQuery):
-        for context in self._iterFileContexts():
+        for path, context in self._iterFileContexts():
             opcodes = []
             opcodes.extend(self._getUpdateOperationOpcodes(query, context))
-            return Editor(context, self._normalizeOpcodeList(opcodes))
+            yield path, Editor(context, self._normalizeOpcodeList(opcodes))
     
     def _getUpdateOperationOpcodes(self, query:ast._UpdateQuery, context:Context):
         """
@@ -151,11 +158,11 @@ class TEQL:
                 yield context.sub(i, i)
         elif isinstance(selector, ast.SelectionAfterCursor):
             for other in self._evaluateSelection(selector.other, context):
-                i = other.end + (selector.n or 1) # TODO maybe should be 0
+                i = other.end + (selector.n or 0)
                 yield context.sub(i,i)
         elif isinstance(selector, ast.SelectionBeforeCursor):
             for other in self._evaluateSelection(selector.other, context):
-                i = other.start - (selector.n or 1) # TODO maybe should be 0
+                i = other.start - (selector.n or 0)
                 yield context.sub(i,i)
         elif isinstance(selector, ast.SelectionCursor):
             for other in self._evaluateSelection(selector.outer, context):
@@ -242,7 +249,6 @@ class TEQL:
         Sort a series of opcodes by index, and ensure that none of them overlap
         """
         prev = None
-        print(opcodes)
         for opcode in sorted(opcodes, key=lambda op: op.start):
             if prev is not None and opcode.start < prev.end:
                 raise TEQLException(f'Conflicting/overlapping operations: {opcode} and {prev}')

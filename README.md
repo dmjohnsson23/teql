@@ -51,7 +51,7 @@ The Perl programming language is designed around text processing, but it's frank
 
 ## Proposed Syntax
 
-*The syntax is still in a constant state of flux ad evolution; nothing below is guaranteed to be final.*
+*The syntax is still in a constant state of flux and evolution; nothing below is guaranteed to be final.*
 
 SQL is a great language for making bulk change to a database. Why not use something similar to make bulk changes to text files? For example:
 

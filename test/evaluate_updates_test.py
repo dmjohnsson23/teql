@@ -12,7 +12,7 @@ class EvaluateUpdatesTest(TestCase):
         self.context = next(self.teql._iterFileContexts())
 
     def test_find_replace(self):
-        # CHANGE 'mimsy' TO 'miserable and flimsy'
+        # CHANGE FIND 'mimsy' TO 'miserable and flimsy';
         editor = self.teql._evaluateUpdateQuery(ast.ChangeQuery(ast.FindSelection('mimsy'), "miserable and flimsy"))
         self.assertEqual(list(editor.operations), [
             Opcode.replace(79, 84, "miserable and flimsy"),
@@ -20,8 +20,15 @@ class EvaluateUpdatesTest(TestCase):
         ])
 
     def test_truncate(self):
-        # DELETE EVERYTHING AFTER LINE 29
+        # DELETE EVERYTHING AFTER LINE 29;
         editor = self.teql._evaluateUpdateQuery(ast.DeleteQuery(ast.SelectionAfterSelection(ast.DirectLineSelection([ast.RangeIndexIndex(29)]))))
         self.assertEqual(list(editor.operations), [
             Opcode.delete(877, 1017),
+        ])
+
+    def test_insert(self):
+        # INSERT " [gruff, rough-mannered, ill-tempered]" AFTER FIND "uffish";
+        editor = self.teql._evaluateUpdateQuery(ast.InsertQuery(" [gruff, rough-mannered, ill-tempered]", ast.SelectionAfterCursor(ast.FindSelection("uffish"))))
+        self.assertEqual(list(editor.operations), [
+            Opcode.insert(451, 451, " [gruff, rough-mannered, ill-tempered]"),
         ])
