@@ -109,6 +109,14 @@ class TEQL:
             editor.context.data.close()
             name = temp.name
         os.replace(name, path)
+    
+    def _executeUpdateQueryPreview(self, query:ast._UpdateQuery):
+        for path, editor in self._evaluateUpdateQuery(query):
+            print(); print(path); print()
+            editor(sys.stdout)
+            print()
+    
+    # TODO: show diff from update query (would require tracking line numbers)
 
     def _evaluateUpdateQuery(self, query:ast._UpdateQuery):
         for path, context in self._iterFileContexts():

@@ -8,7 +8,7 @@ class EvaluateSelectionsTest(TestCase):
         os.chdir(os.path.join(os.path.dirname(__file__)))
         self.teql = TEQL()
         self.teql.use = 'files/aristotle.html'
-        self.context = next(self.teql._iterFileContexts())
+        self.context = next(self.teql._iterFileContexts())[1]
 
     def test_find_selection_string(self):
         results = list(self.teql._evaluateSelection(ast.FindSelection("Virtue"), self.context))

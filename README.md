@@ -14,6 +14,12 @@ teql> SHOW LINE 6;
 teql> DELETE EVERYTHING AFTER FIND "The End";
 ```
 
+## Usage
+
+Due to its very prototype-y nature, the project is not currently installable, but can still be run for testing. After cloning the repository, navigate to the project directory and run `python3 -m teql` to run the current work-in-progress TEQL shell.
+
+TEQL depends on [Lark](https://pypi.org/project/lark/).
+
 ## Rational
 
 I find myself doing a great deal of refactoring. Often this is dull and boring, with repeated use of find-and-replace across multiple files. However, using find-and-replace has some difficulties:

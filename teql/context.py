@@ -5,6 +5,7 @@ from mmap import mmap
 import sys, os
 from operator import or_
 from typing import List
+from .file_map import FileMap
 
 
 class Context:
@@ -27,6 +28,7 @@ class Context:
         self.end = end
         self.encoding = encoding or sys.getdefaultencoding()
         self.line_separator = line_separator or os.linesep
+        self._file_map = None
         if isinstance(self.line_separator, str):
             self.line_separator = self.line_separator.encode(self.encoding)
         self.parent = parent
@@ -78,6 +80,19 @@ class Context:
             self.data.seek(0, os.SEEK_END)
             self.end = self.data.tell()
     
+    @property
+    def file_map(self)->FileMap:
+        """
+        A map of the file that allows quickly traversing and converting cursor positions to line/column numbers.
+
+        This is a map of the entire file, not merely of this context.
+        """
+        if self.parent is not None:
+            return self.parent.file_map
+        if self._file_map is None:
+            self._file_map = FileMap.from_lines(self.split_lines_bytes())
+        return self._file_map
+
     def find(self, value):
         """
         Get a new context by searching this context for a matching string
@@ -157,6 +172,30 @@ class Context:
             raise IndexError()
         return self.data[start:end]
     
+    def page_bytes(self, start=None, end=None, page_size=1024):
+        """
+        Return the raw unencoded bytes between the two indices
+        """
+        if start is None:
+            start = self.start
+        elif start < 0:
+            start = self.end + start
+        else:
+            start = self.start + start
+        if end is None:
+            end = self.end
+        elif end < 0:
+            end = self.end + end
+        else:
+            end = self.start + end
+        if end > self.end:
+            raise IndexError()
+        cursor = start
+        while cursor < end:
+            block_end = min(cursor+page_size, end)
+            yield self.data[cursor:block_end]
+            cursor = block_end
+    
     def string(self, start=None, end=None):
         """
         Return an encoded string (or substring).
@@ -188,7 +227,7 @@ class Context:
             end = self.data.find(self.line_separator, max(0, self.end - len_eol))
             if end == -1:
                 # Failed to find any subsequent EOL; go to the end of the file
-                end = prev_eol + len_eol
+                end = len(self.data)
             else:
                 # Include the line ending in the result
                 end += len_eol
@@ -203,10 +242,20 @@ class Context:
         while start < self.end:
             index = self.data.find(value, start, self.end)
             if index == -1:
+                # Last line didn't have a final EOL
+                yield Context(self.data, start, self.end, encoding=self.encoding, parent=self)
                 break
             end = index + len(value)
             yield Context(self.data, start, end, encoding=self.encoding, parent=self)
             start = end
+    
+    def split_lines_string(self):
+        for line in self.split_lines():
+            yield line.string()
+
+    def split_lines_bytes(self):
+        for line in self.split_lines():
+            yield line.bytes()
     
     def __len__(self):
         return self.end - self.start
