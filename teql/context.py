@@ -41,7 +41,7 @@ class Context:
             self.end += data.start
             self.encoding = data.encoding
             if self.end > data.end:
-                raise Exception('Sub-selection out of bounds')
+                raise IndexError('Sub-selection out of bounds')
         elif isinstance(data, mmap):
             self.data = data
         elif isinstance(data, io.IOBase):
@@ -128,7 +128,7 @@ class Context:
         matched = pattern.search(self.data, self.start, self.end)
         if not matched:
             return None
-        return Context(self.data, matched.pos, matched.endpos, encoding=self.encoding, parent=self, _match_data = matched)
+        return Context(self.data, matched.start(), matched.end(), encoding=self.encoding, parent=self, _match_data = matched)
     
     def find_all_re(self, value, flags=None):
         """
